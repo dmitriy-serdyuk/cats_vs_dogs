@@ -4,6 +4,7 @@ import os
 import cPickle as pkl
 
 import numpy as np
+from scipy import misc
 
 
 class SingleIterator(object):
@@ -32,6 +33,19 @@ class SingleIterator(object):
                 image, label = pkl.load(fin)
             yield image, label
         raise StopIteration()
+
+
+class ResizingIterator(object):
+    def __init__(self, iterator, size):
+        self.iterator = iterator
+        self.size = size
+
+    def __iter__(self):
+        return self
+
+    def next(self):
+        image, label = self.iterator.next()
+        return misc.imresize(image, self.size), label
 
 
 class BatchIterator(object):

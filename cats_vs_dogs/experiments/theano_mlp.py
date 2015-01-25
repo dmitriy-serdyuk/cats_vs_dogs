@@ -7,8 +7,10 @@ import numpy as np
 
 import theano.tensor as tt
 from theano import function
+import theano
 
-from cats_vs_dogs.iterators import SingleIterator, BatchIterator
+from cats_vs_dogs.iterators import (SingleIterator, BatchIterator,
+                                    ResizingIterator)
 
 
 def main(directory, inp_size=(200, 200, 3), hid_size=40000, batch_size=200, lrate=0.01,
@@ -19,11 +21,11 @@ def main(directory, inp_size=(200, 200, 3), hid_size=40000, batch_size=200, lrat
     rng = np.random.RandomState(seed)
     flat_inp = np.prod(inp_size)
     w_init_val = rng.normal(0, 0.01, (hid_size, flat_inp))
-    W = tt.shared(w_init_val, name='W')
+    W = theano.shared(w_init_val, name='W')
     b_init_val = rng.normal(0, 0.01, hid_size)
-    b = tt.shared(b_init_val, name='b')
+    b = theano.shared(b_init_val, name='b')
     c_init_val = rng.normal(0, 0.01, 1)
-    c = tt.shared(c_init_val, name='c')
+    c = theano.shared(c_init_val, name='c')
     params = [W, b, c]
 
     X_prime = X.reshape((batch_size, -1))
@@ -37,8 +39,13 @@ def main(directory, inp_size=(200, 200, 3), hid_size=40000, batch_size=200, lrat
     make_step = function([X, y], [], updates=updates)
     compute_cost = function([X, y], [cost])
 
-    train_iter = BatchIterator(SingleIterator(directory, 'train'), batch_size)
-    valid_iter = BatchIterator(SingleIterator(directory, 'valid'), batch_size)
+    train_iter = SingleIterator(directory, 'train')
+    train_iter = ResizingIterator(train_iter, inp_size[:-1])
+    train_iter = BatchIterator(train_iter, batch_size)
+
+    valid_iter = SingleIterator(directory, 'valid')
+    valid_iter = ResizingIterator(valid_iter, inp_size[:-1])
+    valid_iter = BatchIterator(valid_iter, batch_size)
     for epoch in xrange(epochs):
         train_cost = 0.
         for i, (X_val, y_val) in enumerate(train_iter):
