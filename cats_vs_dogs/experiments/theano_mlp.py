@@ -86,7 +86,7 @@ def main(directory, inp_size=(200, 200, 3), hid_size=40000, batch_size=200, lrat
             with open('params.pkl', 'w') as fout:
                 pkl.dump([param.get_value() for param in params], fout)
     except KeyboardInterrupt:
-        print '.. saving model, to exit press Ctrl-C again'
+        print '.. saving model, press Ctrl-C again to exit now'
         with open('params.pkl', 'w') as fout:
             pkl.dump([param.get_value() for param in params], fout)
         raise
