@@ -35,11 +35,13 @@ def main(directory, inp_size=(200, 200, 3), hid_size=40000, batch_size=200, lrat
 
     out = tt.nnet.sigmoid(h.dot(c))
     cost = (-y * tt.log(out)).mean()
+    misclass = tt.neq(y, out.round()).mean()
+
     grads = tt.grad(cost, params)
     updates = OrderedDict({param: param - lrate * grad for param, grad
                            in zip(params, grads)})
-    make_step = function([X, y], [], updates=updates)
-    compute_cost = function([X, y], cost)
+    make_step = function([X, y], [cost, misclass], updates=updates)
+    compute_costs = function([X, y], [cost, misclass])
 
     train_iter = SingleIterator(directory, 'train')
     train_iter = ResizingIterator(train_iter, inp_size[:-1])
@@ -51,18 +53,25 @@ def main(directory, inp_size=(200, 200, 3), hid_size=40000, batch_size=200, lrat
     print '.. starting training'
     try:
         for epoch in xrange(epochs):
-            train_cost = 0.
+            train_misclass = 0.
             for i, (X_val, y_val) in enumerate(train_iter):
-                make_step(X_val, y_val)
-                train_cost += compute_cost(X_val, y_val)
-                print '.. iterations:', i, 'train cost:', train_cost / (i + 1)
-            train_cost /= i
+                cost, misclass = make_step(X_val, y_val)
+                train_misclass += misclass
+                print '.. iterations:', i, 'train cost:', cost
+            train_misclass /= i
             valid_cost = 0.
+            valid_misclass = 0.
             for i, (X_val, y_val) in enumerate(valid_iter):
-                valid_cost += compute_cost(X_val, y_val)
+                cost, misclass = compute_costs(X_val, y_val)
+                valid_cost += cost
+                valid_misclass += misclass
             valid_cost /= i
+            valid_misclass /= i
 
-            print '.. epoch', epoch, 'train cost', train_cost, 'valid cost', valid_cost
+            form_string = ('.. epoch %d, train misclass %.2f, '
+                           'valid cost %.2f, valid misclass %.2f' %
+                           (epoch, train_misclass, valid_cost, valid_misclass))
+            print form_string
             print '.. saving model'
             with open('params.pkl', 'w') as fout:
                 pkl.dump([param.get_value() for param in params], fout)

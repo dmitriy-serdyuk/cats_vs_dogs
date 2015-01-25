@@ -58,10 +58,10 @@ def parse_args():
                         help='Random number generator seed')
     parser.add_argument('--no_make_dataset', action='store_true',
                         default=False,
-                        help='If need to make datasets')
+                        help='Skip datasets making')
     parser.add_argument('--no_aggregate', action='store_true',
                         default=False,
-                        help='If need to aggregate images')
+                        help='Skip images aggregating ')
     return parser.parse_args()
 
 
