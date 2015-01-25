@@ -46,9 +46,10 @@ def make_datasets(train_share, valid_share, directory, seed, **kwargs):
         pkl.dump((train, valid, test), fout)
 
 
-def create_hdf5(directory):
+def create_hdf5(directory, hdf5_file):
     filters = tables.Filters(complib='blosc', complevel=5)
-    h5file = tables.open_file('dummy.h5', mode='w',
+    full_path = os.path.join(directory, hdf5_file)
+    h5file = tables.open_file(full_path, mode='w',
                               title='Cats vs Dogs dataset',
                               filters=filters)
     save_path = os.path.join(directory, '../datasets.pkl')
@@ -100,6 +101,9 @@ def parse_args():
     parser.add_argument('--no_create_hdf5', action='store_true',
                         default=False,
                         help='Skip creating hdf5 dataset')
+    parser.add_argument('--hdf5_file',
+                        default='dataset.h5',
+                        help='HDF5 file')
     return parser.parse_args()
 
 
