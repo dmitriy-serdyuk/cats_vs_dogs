@@ -16,7 +16,7 @@ class SingleIterator(object):
             self.data_files = train
         elif subset == 'valid':
             self.data_files = valid
-        elif subset == 'train':
+        elif subset == 'test':
             self.data_files = test
         else:
             raise ValueError('Incorrect subset, possible values are train, '
@@ -24,20 +24,16 @@ class SingleIterator(object):
         self.directory = directory
 
     def __iter__(self):
-        return self
-
-    def next(self):
         for data_file in self.data_files:
             full_path = os.path.join(self.directory, data_file)
             with open(full_path, 'r') as fin:
                 image, label = pkl.load(fin)
             yield image, label
-        raise StopIteration()
 
 
 class ResizingIterator(object):
     def __init__(self, iterator, size):
-        self.iterator = iterator
+        self.iterator = iterator.__iter__()
         self.size = size
 
     def __iter__(self):
@@ -50,7 +46,7 @@ class ResizingIterator(object):
 
 class BatchIterator(object):
     def __init__(self, iterator, batch_size):
-        self.iterator = iterator
+        self.iterator = iterator.__iter__()
         self.batch_size = batch_size
 
     def __iter__(self):

@@ -43,7 +43,7 @@ def make_datasets(train_share, valid_share, directory, seed, **kwargs):
 
 
 def parse_args():
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser('Aggregates cats vs dogs dataset')
     parser.add_argument('--directory',
                         default='/home/dima/Downloads/datasets/cats_vs_dogs/train/',
                         help='Directory with data (extracted kaggle dataset)')
