@@ -68,7 +68,6 @@ def main(directory, inp_size=(200, 200, 3), hid_size=40000, batch_size=200, lrat
                 cost, misclass = make_step(X_val, y_val)
                 train_misclass += misclass
                 print '.. iterations:', i, 'train cost:', cost
-                save_model(params)
             train_misclass /= i
             valid_cost = 0.
             valid_misclass = 0.
@@ -92,9 +91,9 @@ def main(directory, inp_size=(200, 200, 3), hid_size=40000, batch_size=200, lrat
 
 
 def save_model(params):
-    with open('params.pkl', 'w') as fout:
+    with open('params.npz', 'w') as fout:
         param_values = [param.get_value() for param in params]
-        pkl.dump(param_values, fout)
+        np.savez(fout, *param_values)
 
 
 def parse_args():
