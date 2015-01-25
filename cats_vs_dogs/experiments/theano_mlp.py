@@ -15,19 +15,29 @@ from cats_vs_dogs.iterators import (SingleIterator, BatchIterator,
 
 
 def main(directory, inp_size=(200, 200, 3), hid_size=40000, batch_size=200, lrate=0.01,
-         epochs=50, seed=1):
+         epochs=50, seed=1, model_file=''):
     print '.. building model'
     X = tt.tensor4('X')
     y = tt.vector('y')
 
     rng = np.random.RandomState(seed)
     flat_inp = np.prod(inp_size)
-    w_init_val = rng.normal(0, 0.01, (hid_size, flat_inp))
-    W = theano.shared(w_init_val, name='W')
-    b_init_val = rng.normal(0, 0.01, hid_size)
-    b = theano.shared(b_init_val, name='b')
-    c_init_val = rng.normal(0, 0.01, hid_size)
-    c = theano.shared(c_init_val, name='c')
+
+    if model_file == '':
+        w_init_val = rng.normal(0, 0.01, (hid_size, flat_inp))
+        W = theano.shared(w_init_val, name='W')
+        b_init_val = rng.normal(0, 0.01, hid_size)
+        b = theano.shared(b_init_val, name='b')
+        c_init_val = rng.normal(0, 0.01, hid_size)
+        c = theano.shared(c_init_val, name='c')
+    else:
+        with open(model_file, 'r') as fin:
+            param_vals = pkl.load(fin)
+        W_val, b_val, c_val = param_vals
+        W = theano.shared(W_val, name='W')
+        b = theano.shared(b_val, name='b')
+        c = theano.shared(c_val, name='c')
+
     params = [W, b, c]
 
     X_prime = X.reshape((batch_size, -1))
@@ -105,6 +115,9 @@ def parse_args():
     parser.add_argument('--seed', type=int,
                         default=1,
                         help='Random number generator seed')
+    parser.add_argument('--model_file',
+                        default='',
+                        help='Model to continue training')
     return parser.parse_args()
 
 
