@@ -4,7 +4,6 @@ import os.path
 import cPickle as pkl
 
 import numpy as np
-import numpy.random
 
 from scipy import misc
 
