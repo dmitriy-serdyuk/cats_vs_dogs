@@ -68,6 +68,7 @@ def main(directory, inp_size=(200, 200, 3), hid_size=40000, batch_size=200, lrat
                 cost, misclass = make_step(X_val, y_val)
                 train_misclass += misclass
                 print '.. iterations:', i, 'train cost:', cost
+                save_model(params)
             train_misclass /= i
             valid_cost = 0.
             valid_misclass = 0.
@@ -83,13 +84,17 @@ def main(directory, inp_size=(200, 200, 3), hid_size=40000, batch_size=200, lrat
                            (epoch, train_misclass, valid_cost, valid_misclass))
             print form_string
             print '.. saving model'
-            with open('params.pkl', 'w') as fout:
-                pkl.dump([param.get_value() for param in params], fout)
+            save_model(params)
     except KeyboardInterrupt:
         print '.. saving model, press Ctrl-C again to exit now'
-        with open('params.pkl', 'w') as fout:
-            pkl.dump([param.get_value() for param in params], fout)
+        save_model(params)
         raise
+
+
+def save_model(params):
+    with open('params.pkl', 'w') as fout:
+        param_values = [param.get_value() for param in params]
+        pkl.dump(param_values, fout)
 
 
 def parse_args():
