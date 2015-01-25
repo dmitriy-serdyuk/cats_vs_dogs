@@ -31,8 +31,7 @@ def main(directory, inp_size=(200, 200, 3), hid_size=40000, batch_size=200, lrat
         c_init_val = rng.normal(0, 0.01, hid_size)
         c = theano.shared(c_init_val, name='c')
     else:
-        with open(model_file, 'r') as fin:
-            param_vals = pkl.load(fin)
+        param_vals = np.loads(model_file)
         W_val, b_val, c_val = param_vals
         W = theano.shared(W_val, name='W')
         b = theano.shared(b_val, name='b')

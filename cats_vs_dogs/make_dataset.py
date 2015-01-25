@@ -1,7 +1,11 @@
+__authors__ = "Vincent Dumoulin, Dmitry Serdyuk"
+__maintainer__ = "Dmitry Serdyuk"
+
 import argparse
 import os
 import os.path
 import cPickle as pkl
+import tables
 
 import numpy as np
 
@@ -40,6 +44,35 @@ def make_datasets(train_share, valid_share, directory, seed, **kwargs):
     save_path = os.path.join(directory, '../datasets.pkl')
     with open(save_path, 'w') as fout:
         pkl.dump((train, valid, test), fout)
+
+
+def create_hdf5(rng):
+    filters = tables.Filters(complib='blosc', complevel=5)
+    h5file = tables.open_file('dummy.h5', mode='w',
+                              title='Cats vs Dogs dataset',
+                              filters=filters)
+    group = h5file.create_group(h5file.root, 'Data', 'Data')
+    atom = tables.UInt8Atom()
+    X = h5file.create_vlarray(group, 'X', atom=atom, title='Data values',
+                              expectedrows=500, filters=filters)
+    y = h5file.create_carray(group, 'y', atom=atom, title='Data targets',
+                             shape=(500, 1), filters=filters)
+    s = h5file.create_carray(group, 's', atom=atom, title='Data shapes',
+                             shape=(500, 3), filters=filters)
+
+    shapes = rng.randint(low=10, high=101, size=(500, 2))
+    for i, shape in enumerate(shapes):
+        size = (shape[0], shape[1], 3)
+        image = rng.uniform(low=0, high=1, size=size)
+        target = rng.randint(low=0, high=2)
+
+        X.append(image.flatten())
+        y[i] = target
+        s[i] = np.array(size)
+        if i % 100 == 0:
+            print i
+            h5file.flush()
+    h5file.flush()
 
 
 def parse_args():
