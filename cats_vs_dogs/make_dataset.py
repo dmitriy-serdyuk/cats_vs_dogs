@@ -28,7 +28,7 @@ def make_datasets(train_share, valid_share, directory, seed, **kwargs):
     all_files = []
     for file in os.listdir(directory):
         if file.endswith(".pkl"):
-            all_files += file
+            all_files += [file]
     n_train = int(len(all_files) * train_share)
     n_valid = int(len(all_files) * valid_share)
 
@@ -56,10 +56,21 @@ def parse_args():
     parser.add_argument('--seed', type=int,
                         default=1,
                         help='Random number generator seed')
+    parser.add_argument('--no_make_dataset', action='store_true',
+                        default=False,
+                        help='If need to make datasets')
+    parser.add_argument('--no_aggregate', action='store_true',
+                        default=False,
+                        help='If need to aggregate images')
     return parser.parse_args()
 
 
 if __name__ == '__main__':
     args = parse_args()
-    aggregate(**args.__dict__)
-    make_datasets(**args.__dict__)
+    if not args.no_aggregate:
+        print '.. aggregating...'
+        aggregate(**args.__dict__)
+    if not args.no_make_dataset:
+        print '.. making datasets...'
+        make_datasets(**args.__dict__)
+    print '.. finished, exiting'
