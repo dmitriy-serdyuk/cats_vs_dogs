@@ -9,14 +9,18 @@ from scipy import misc
 
 
 def aggregate(directory, **kwargs):
-    for file in os.listdir(directory):
+    dirs = os.listdir(directory)
+    total = len(dirs)
+    for i, file in enumerate(dirs):
         if file.endswith(".jpg"):
             full_path = os.path.join(directory, file)
             image = misc.imread(full_path)
             label, id, _ = file.split('.')
-            label = np.array([label == 'dog', label == 'cat'], dtype='int64')
+            label = int(label == 'dog')
             with open(full_path + '.pkl', 'w') as fout:
                 pkl.dump((image, label), fout)
+        if i % 100 == 0:
+            print '.. aggregated', i, '/', total
 
 
 def make_datasets(train_share, valid_share, directory, seed, **kwargs):
