@@ -46,7 +46,7 @@ def make_datasets(train_share, valid_share, directory, seed, **kwargs):
         pkl.dump((train, valid, test), fout)
 
 
-def create_hdf5(directory, hdf5_file):
+def create_hdf5(directory, hdf5_file, **kwargs):
     filters = tables.Filters(complib='blosc', complevel=5)
     full_path = os.path.join(directory, hdf5_file)
     h5file = tables.open_file(full_path, mode='w',
@@ -55,18 +55,19 @@ def create_hdf5(directory, hdf5_file):
     save_path = os.path.join(directory, '../datasets.pkl')
     with open(save_path, 'r') as fin:
         files = pkl.load(fin)
-    for files, subset in zip(files, ['train', 'valid', 'test']):
+    for subfiles, subset in zip(files, ['train', 'valid', 'test']):
         group = h5file.create_group(h5file.root, subset, subset)
         atom = tables.UInt8Atom()
         X = h5file.create_vlarray(group, 'X', atom=atom, title='Data values',
-                                  expectedrows=len(files), filters=filters)
+                                  expectedrows=len(subfiles), filters=filters)
         y = h5file.create_carray(group, 'y', atom=atom, title='Data targets',
-                                 shape=(1,), filters=filters)
+                                 shape=(len(subfiles),), filters=filters)
         s = h5file.create_carray(group, 's', atom=atom, title='Data shapes',
-                                 shape=(len(files), 3), filters=filters)
+                                 shape=(len(subfiles), 3), filters=filters)
 
-        for i, file in enumerate(file):
-            with open(file, 'r') as fin:
+        for i, file in enumerate(subfiles):
+            full_path = os.path.join(directory, file)
+            with open(full_path, 'r') as fin:
                 image, label = pkl.load(fin)
 
             X.append(image.flatten())
