@@ -1,7 +1,11 @@
+__authors__ = "Vincent Dumoulin, Dmitry Serdyuk"
+__maintainer__ = "Dmitry Serdyuk"
+
 import argparse
 import os
 import os.path
 import cPickle as pkl
+import tables
 
 import numpy as np
 
@@ -42,6 +46,38 @@ def make_datasets(train_share, valid_share, directory, seed, **kwargs):
         pkl.dump((train, valid, test), fout)
 
 
+def create_hdf5(directory, hdf5_file):
+    filters = tables.Filters(complib='blosc', complevel=5)
+    full_path = os.path.join(directory, hdf5_file)
+    h5file = tables.open_file(full_path, mode='w',
+                              title='Cats vs Dogs dataset',
+                              filters=filters)
+    save_path = os.path.join(directory, '../datasets.pkl')
+    with open(save_path, 'r') as fin:
+        files = pkl.load(fin)
+    for files, subset in zip(files, ['train', 'valid', 'test']):
+        group = h5file.create_group(h5file.root, subset, subset)
+        atom = tables.UInt8Atom()
+        X = h5file.create_vlarray(group, 'X', atom=atom, title='Data values',
+                                  expectedrows=len(files), filters=filters)
+        y = h5file.create_carray(group, 'y', atom=atom, title='Data targets',
+                                 shape=(1,), filters=filters)
+        s = h5file.create_carray(group, 's', atom=atom, title='Data shapes',
+                                 shape=(len(files), 3), filters=filters)
+
+        for i, file in enumerate(file):
+            with open(file, 'r') as fin:
+                image, label = pkl.load(fin)
+
+            X.append(image.flatten())
+            y[i] = label
+            s[i] = np.array(image.shape)
+            if i % 100 == 0:
+                print '.. aggregated', i, 'from', subset
+                h5file.flush()
+        h5file.flush()
+
+
 def parse_args():
     parser = argparse.ArgumentParser('Aggregates cats vs dogs dataset')
     parser.add_argument('--directory',
@@ -62,15 +98,24 @@ def parse_args():
     parser.add_argument('--no_aggregate', action='store_true',
                         default=False,
                         help='Skip images aggregating ')
+    parser.add_argument('--no_create_hdf5', action='store_true',
+                        default=False,
+                        help='Skip creating hdf5 dataset')
+    parser.add_argument('--hdf5_file',
+                        default='dataset.h5',
+                        help='HDF5 file')
     return parser.parse_args()
 
 
 if __name__ == '__main__':
     args = parse_args()
     if not args.no_aggregate:
-        print '.. aggregating...'
+        print '.. aggregating'
         aggregate(**args.__dict__)
     if not args.no_make_dataset:
-        print '.. making datasets...'
+        print '.. making datasets'
         make_datasets(**args.__dict__)
+    if not args.no_create_hdf5:
+        print '.. making hdf5'
+        create_hdf5(**args.__dict__)
     print '.. finished, exiting'
