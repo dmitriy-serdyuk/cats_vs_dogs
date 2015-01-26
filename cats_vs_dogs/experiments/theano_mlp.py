@@ -41,11 +41,11 @@ def main(directory, inp_size=(200, 200, 3), hid_size=40000, batch_size=200,
     params = [W, b, c]
 
     X_prime = X.reshape((batch_size, -1))
-    h = tt.nnet.sigmoid(X_prime.dot(W.T) + b.dimshuffle('x', 0))
+    h = tt.tanh(X_prime.dot(W.T) + b.dimshuffle('x', 0))
 
     out = tt.nnet.sigmoid(h.dot(c))
 
-    regularizer = (W ** 2).sum() + (b ** 2).sum() + (c ** 2).sum()
+    regularizer = (W ** 2).sum() + (c ** 2).sum()
     cost = (-y * tt.log(out)).mean() + reg_coef * regularizer
     misclass = tt.neq(y, out.round()).mean()
 
