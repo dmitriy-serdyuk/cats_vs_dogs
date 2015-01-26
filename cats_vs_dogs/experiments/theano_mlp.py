@@ -53,25 +53,24 @@ def main(directory, inp_size=(200, 200, 3), hid_size=40000, batch_size=200, lrat
     make_step = function([X, y], [cost, misclass], updates=updates)
     compute_costs = function([X, y], [cost, misclass])
 
-    train_iter = SingleIterator(directory, 'train')
-    train_iter = ResizingIterator(train_iter, inp_size[:-1])
-    train_iter = BatchIterator(train_iter, batch_size)
+    def get_iter(subset):
+        iter = SingleIterator(directory, subset)
+        iter = ResizingIterator(iter, inp_size[:-1])
+        iter = BatchIterator(iter, batch_size)
+        return iter
 
-    valid_iter = SingleIterator(directory, 'valid')
-    valid_iter = ResizingIterator(valid_iter, inp_size[:-1])
-    valid_iter = BatchIterator(valid_iter, batch_size)
     print '.. starting training'
     try:
         for epoch in xrange(epochs):
             train_misclass = 0.
-            for i, (X_val, y_val) in enumerate(train_iter):
+            for i, (X_val, y_val) in enumerate(get_iter('train')):
                 cost, misclass = make_step(X_val, y_val)
                 train_misclass += misclass
                 print '.. iterations:', i, 'train cost:', cost
             train_misclass /= i
             valid_cost = 0.
             valid_misclass = 0.
-            for i, (X_val, y_val) in enumerate(valid_iter):
+            for i, (X_val, y_val) in enumerate(get_iter('valid')):
                 cost, misclass = compute_costs(X_val, y_val)
                 valid_cost += cost
                 valid_misclass += misclass
