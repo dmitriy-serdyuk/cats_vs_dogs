@@ -2,7 +2,6 @@ __author__ = 'dima'
 
 import os
 import cPickle as pkl
-import tables
 from itertools import izip
 
 import numpy as np
@@ -35,8 +34,7 @@ class SingleIterator(object):
 
 
 class SingleH5Iterator(object):
-    def __init__(self, dataset, subset, floatX='float32'):
-        data_file = tables.open_file(dataset)
+    def __init__(self, data_file, subset, floatX='float32'):
         self.X = data_file.get_node('/' + subset + '/X')
         self.y = data_file.get_node('/' + subset + '/y')
         self.s = data_file.get_node('/' + subset + '/s')

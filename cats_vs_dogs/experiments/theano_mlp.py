@@ -3,6 +3,7 @@ __author__ = 'dima'
 from collections import OrderedDict
 import argparse
 import cPickle as pkl
+import tables
 
 import numpy as np
 
@@ -54,8 +55,9 @@ def main(directory, inp_size=(200, 200, 3), hid_size=40000, batch_size=200,
     make_step = function([X, y], [cost, misclass], updates=updates)
     compute_costs = function([X, y], [cost, misclass])
 
+    data_file = tables.open_file(directory)
     def get_iter(subset):
-        iter = SingleH5Iterator(directory, subset)
+        iter = SingleH5Iterator(data_file, subset)
         iter = ResizingIterator(iter, inp_size[:-1])
         iter = BatchIterator(iter, batch_size)
         return iter
