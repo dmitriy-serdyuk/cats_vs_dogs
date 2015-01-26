@@ -11,11 +11,11 @@ from theano import function
 import theano
 
 from cats_vs_dogs.iterators import (SingleIterator, BatchIterator,
-                                    ResizingIterator)
+                                    ResizingIterator, SingleH5Iterator)
 
 
-def main(directory, inp_size=(200, 200, 3), hid_size=40000, batch_size=200, lrate=0.01,
-         epochs=50, reg_coef=0.1, seed=1, model_file=''):
+def main(directory, inp_size=(200, 200, 3), hid_size=40000, batch_size=200,
+         lrate=0.01, epochs=50, reg_coef=0.1, seed=1, model_file=''):
     print '.. building model'
     X = tt.tensor4('X')
     y = tt.vector('y')
@@ -55,7 +55,7 @@ def main(directory, inp_size=(200, 200, 3), hid_size=40000, batch_size=200, lrat
     compute_costs = function([X, y], [cost, misclass])
 
     def get_iter(subset):
-        iter = SingleIterator(directory, subset)
+        iter = SingleH5Iterator(directory, subset)
         iter = ResizingIterator(iter, inp_size[:-1])
         iter = BatchIterator(iter, batch_size)
         return iter
@@ -67,7 +67,8 @@ def main(directory, inp_size=(200, 200, 3), hid_size=40000, batch_size=200, lrat
             for i, (X_val, y_val) in enumerate(get_iter('train')):
                 cost, misclass = make_step(X_val, y_val)
                 train_misclass += misclass
-                print '.. iterations:', i, 'train cost:', cost
+                print '.. iterations: %d train cost: %.2f misclass: %.2f' % \
+                      (i, cost, misclass)
             train_misclass /= i
             valid_cost = 0.
             valid_misclass = 0.

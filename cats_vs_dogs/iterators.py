@@ -3,6 +3,7 @@ __author__ = 'dima'
 import os
 import cPickle as pkl
 import tables
+from itertools import izip
 
 import numpy as np
 from scipy import misc
@@ -42,8 +43,10 @@ class SingleH5Iterator(object):
         self.floatX = floatX
 
     def __iter__(self):
-        for X, y, shape in zip(self.X, self.y, self.s):
-            yield X.reshape(shape), y
+        for X, y, shape in izip(self.X.iterrows(), self.y.iterrows(),
+                               self.s.iterrows()):
+            yield (np.cast[self.floatX](X.reshape(shape)),
+                   np.cast[self.floatX](y))
 
 
 class ResizingIterator(object):

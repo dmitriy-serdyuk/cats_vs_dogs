@@ -57,13 +57,13 @@ def create_hdf5(directory, hdf5_file, **kwargs):
         files = pkl.load(fin)
     for subfiles, subset in zip(files, ['train', 'valid', 'test']):
         group = h5file.create_group(h5file.root, subset, subset)
-        X = h5file.create_vlarray(group, 'X', atom=tables.Float32Atom(),
+        X = h5file.create_vlarray(group, 'X', atom=tables.UInt8Atom(),
                                   title='Data values',
                                   expectedrows=len(subfiles), filters=filters)
-        y = h5file.create_carray(group, 'y', atom=tables.Float32Atom(),
+        y = h5file.create_carray(group, 'y', atom=tables.UInt8Atom(),
                                  title='Data targets',
                                  shape=(len(subfiles),), filters=filters)
-        s = h5file.create_carray(group, 's', atom=tables.UInt64Atom(),
+        s = h5file.create_carray(group, 's', atom=tables.UInt32Atom(),
                                  title='Data shapes',
                                  shape=(len(subfiles), 3), filters=filters)
 
