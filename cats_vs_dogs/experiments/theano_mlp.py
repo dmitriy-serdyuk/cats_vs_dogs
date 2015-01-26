@@ -33,9 +33,9 @@ def main(directory, inp_size=(200, 200, 3), hid_size=40000, batch_size=200,
         c = theano.shared(c_init_val, name='c')
     else:
         param_vals = np.load(model_file)
-        W_val = param_vals['arr_1'].reshape((hid_size, flat_inp))
-        b_val = param_vals['arr_2']
-        c_val = param_vals['arr_3']
+        W_val = param_vals['W'].reshape((hid_size, flat_inp))
+        b_val = param_vals['b']
+        c_val = param_vals['c']
         W = theano.shared(W_val, name='W')
         b = theano.shared(b_val, name='b')
         c = theano.shared(c_val, name='c')
@@ -98,7 +98,7 @@ def main(directory, inp_size=(200, 200, 3), hid_size=40000, batch_size=200,
 def save_model(params):
     with open('params.npz', 'w') as fout:
         param_values = [param.get_value() for param in params]
-        np.savez(fout, *param_values)
+        np.savez(fout, dict(zip(['W', 'b', 'c'], param_values)))
 
 
 def parse_args():
