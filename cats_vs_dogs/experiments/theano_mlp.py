@@ -32,8 +32,10 @@ def main(directory, inp_size=(200, 200, 3), hid_size=40000, batch_size=200,
         c_init_val = rng.normal(0, 0.01, hid_size)
         c = theano.shared(c_init_val, name='c')
     else:
-        param_vals = np.loads(model_file)
-        W_val, b_val, c_val = param_vals
+        param_vals = np.load(model_file)
+        W_val = param_vals['arr_1'].reshape((hid_size, flat_inp))
+        b_val = param_vals['arr_2']
+        c_val = param_vals['arr_3']
         W = theano.shared(W_val, name='W')
         b = theano.shared(b_val, name='b')
         c = theano.shared(c_val, name='c')
