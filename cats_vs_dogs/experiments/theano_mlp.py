@@ -15,7 +15,7 @@ from cats_vs_dogs.iterators import (SingleIterator, BatchIterator,
 
 
 def main(directory, inp_size=(200, 200, 3), hid_size=40000, batch_size=200, lrate=0.01,
-         epochs=50, seed=1, model_file=''):
+         epochs=50, reg_coef=0.1, seed=1, model_file=''):
     print '.. building model'
     X = tt.tensor4('X')
     y = tt.vector('y')
@@ -43,7 +43,9 @@ def main(directory, inp_size=(200, 200, 3), hid_size=40000, batch_size=200, lrat
     h = tt.nnet.sigmoid(X_prime.dot(W.T) + b.dimshuffle('x', 0))
 
     out = tt.nnet.sigmoid(h.dot(c))
-    cost = (-y * tt.log(out)).mean()
+
+    regularizer = (W ** 2).sum() + (b ** 2).sum() + (c ** 2).sum()
+    cost = (-y * tt.log(out)).mean() + reg_coef * regularizer
     misclass = tt.neq(y, out.round()).mean()
 
     grads = tt.grad(cost, params)
@@ -111,6 +113,9 @@ def parse_args():
     parser.add_argument('--lrate', type=float,
                         default=0.01,
                         help='Learning rate')
+    parser.add_argument('--reg_coef', type=float,
+                        default=0.1,
+                        help='Regularization coefficient')
     parser.add_argument('--epochs', type=int,
                         default=50,
                         help='Number of epochs')

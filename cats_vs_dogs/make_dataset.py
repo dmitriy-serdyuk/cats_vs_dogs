@@ -57,7 +57,6 @@ def create_hdf5(directory, hdf5_file, **kwargs):
         files = pkl.load(fin)
     for subfiles, subset in zip(files, ['train', 'valid', 'test']):
         group = h5file.create_group(h5file.root, subset, subset)
-        atom = tables.UInt64Atom()
         X = h5file.create_vlarray(group, 'X', atom=tables.Float32Atom(),
                                   title='Data values',
                                   expectedrows=len(subfiles), filters=filters)
