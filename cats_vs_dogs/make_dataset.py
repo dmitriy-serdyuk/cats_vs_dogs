@@ -46,7 +46,7 @@ def make_datasets(train_share, valid_share, directory, seed, **kwargs):
         pkl.dump((train, valid, test), fout)
 
 
-def create_hdf5(directory, hdf5_file):
+def create_hdf5(directory, hdf5_file, **kwargs):
     filters = tables.Filters(complib='blosc', complevel=5)
     full_path = os.path.join(directory, hdf5_file)
     h5file = tables.open_file(full_path, mode='w',
