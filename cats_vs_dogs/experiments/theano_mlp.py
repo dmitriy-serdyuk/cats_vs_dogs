@@ -96,9 +96,8 @@ def main(directory, inp_size=(200, 200, 3), hid_size=40000, batch_size=200,
 
 
 def save_model(params):
-    with open('params.npz', 'w') as fout:
-        param_values = [param.get_value() for param in params]
-        np.savez(fout, dict(zip(['W', 'b', 'c'], param_values)))
+    param_values = [param.get_value() for param in params]
+    np.savez('params.npz', **dict(zip(['W', 'b', 'c'], param_values)))
 
 
 def parse_args():
