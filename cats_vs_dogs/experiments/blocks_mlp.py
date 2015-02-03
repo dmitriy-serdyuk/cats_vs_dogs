@@ -1,6 +1,6 @@
 from theano import tensor
 
-from blocks.bricks import WEIGHTS, MLP, Tanh, Softmax
+from blocks.bricks import MLP, Tanh, Softmax
 from blocks.bricks.cost import CategoricalCrossEntropy, MisclassificationRate
 from blocks.initialization import IsotropicGaussian, Constant
 from blocks.datasets import DataStream
@@ -41,7 +41,7 @@ if __name__ == '__main__':
         model=mlp, data_stream=train_stream,
         algorithm=GradientDescent(
             cost=cost, step_rule=SteepestDescent(learning_rate=0.1)),
-        extensions=[FinishAfter(after_n_epochs=50000),
+        extensions=[FinishAfter(after_n_epochs=5),
                     DataStreamMonitoring(
                         expressions=[cost, error_rate],
                         data_stream=train_stream,
