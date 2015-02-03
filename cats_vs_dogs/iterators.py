@@ -7,6 +7,10 @@ from itertools import izip
 import numpy as np
 from scipy import misc
 
+from blocks.datasets import Dataset
+from ift6266h15.code.pylearn2.datasets import variable_image_dataset
+from ift6266h15.code.pylearn2.datasets.variable_image_dataset import RandomCrop
+
 
 class SingleIterator(object):
     def __init__(self, directory, subset, floatX='float32'):
@@ -76,3 +80,35 @@ class BatchIterator(object):
             images += [image]
             labels += [label]
         return np.array(images), np.array(labels)
+
+
+class DogsVsCats(Dataset):
+    provides_sources = ['X', 'y']
+
+    def __init__(self, subset):
+        self.sources = ['X', 'y']
+        self.subset = subset
+        if subset == 'train':
+            self.start = 0
+            self.stop = 20000
+        elif subset == 'valid':
+            self.start = 20000
+            self.stop = 22500
+        elif subset == 'test':
+            self.start = 22500
+            self.stop = 25000
+        container = variable_image_dataset.DogsVsCats(RandomCrop(256, 221),
+                                                      start=self.start,
+                                                      stop=self.stop)
+        self.iterator = container.iterator(
+            mode='batchwise_shuffled_sequential',
+            batch_size=100)
+        super(DogsVsCats, self).__init__(self.sources)
+
+    def num_examples(self):
+        return self.stop - self.start
+
+    def get_data(self, state=None, request=None):
+        X, y = next(self.iterator)
+        return X.reshape((100, -1)), y
+
