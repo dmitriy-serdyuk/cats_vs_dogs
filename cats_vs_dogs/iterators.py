@@ -97,19 +97,22 @@ class DogsVsCats(Dataset):
         elif subset == 'test':
             self.start = 22500
             self.stop = 25000
+        super(DogsVsCats, self).__init__(self.sources)
+
+    def open(self):
         container = variable_image_dataset.DogsVsCats(RandomCrop(256, 221),
                                                       start=self.start,
                                                       stop=self.stop)
-        self.iterator = container.iterator(
+        iterator = container.iterator(
             mode='batchwise_shuffled_sequential',
             batch_size=100)
-        super(DogsVsCats, self).__init__(self.sources)
+        return iterator
 
     def num_examples(self):
         return self.stop - self.start
 
     def get_data(self, state=None, request=None):
-        X, y = next(self.iterator)
+        X, y = next(state)
         X = X.transpose(0, 3, 1, 2).reshape((100, -1))
         y = np.concatenate((y, 1 - y), axis=1)
         return X, y
