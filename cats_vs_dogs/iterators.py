@@ -90,7 +90,7 @@ class DogsVsCats(Dataset):
         self.subset = subset
         if subset == 'train':
             self.start = 0
-            self.stop = 20000
+            self.stop = 200
         elif subset == 'valid':
             self.start = 20000
             self.stop = 22500

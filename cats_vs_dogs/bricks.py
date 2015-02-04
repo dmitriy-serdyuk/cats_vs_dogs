@@ -29,10 +29,6 @@ class Convolutional(Initializable, Feedforward):
         self.params.append(W)
         self.add_auxiliary_variable(W.norm(2), name='W_norm')
 
-    @property
-    def W(self):
-        return self.params[0]
-
     def _initialize(self):
         W, = self.params
         self.weights_init.initialize(W, self.rng)
