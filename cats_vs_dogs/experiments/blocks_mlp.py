@@ -23,7 +23,7 @@ if __name__ == '__main__':
     y = tensor.lmatrix('y')
     y_hat = mlp.apply(x)
     cost = CategoricalCrossEntropy().apply(y, y_hat)
-    #error_rate = MisclassificationRate().apply(y, y_hat.T)
+    error_rate = MisclassificationRate().apply(y[:, 0], y_hat)
 
     train_dataset = DogsVsCats('train')
     train_stream = DataStream(
@@ -37,18 +37,19 @@ if __name__ == '__main__':
     valid_stream = DataStream(
         dataset=valid_dataset,
         iteration_scheme=SequentialScheme(train_dataset.num_examples, 100))
+
     train_monitor = DataStreamMonitoring(
-        variables=[cost], data_stream=train_stream, prefix="train")
+        variables=[cost, error_rate], data_stream=train_stream, prefix="train")
     valid_monitor = DataStreamMonitoring(
-        variables=[cost], data_stream=valid_stream, prefix="valid")
+        variables=[cost, error_rate], data_stream=valid_stream, prefix="valid")
     test_monitor = DataStreamMonitoring(
-        variables=[cost], data_stream=test_stream, prefix="test")
+        variables=[cost, error_rate], data_stream=test_stream, prefix="test")
 
     main_loop = MainLoop(
         model=mlp, data_stream=train_stream,
         algorithm=GradientDescent(
             cost=cost, step_rule=SteepestDescent(learning_rate=1.e-4)),
-        extensions=[FinishAfter(after_n_epochs=5),
+        extensions=[FinishAfter(after_n_epochs=50000),
                     train_monitor,
                     valid_monitor,
                     test_monitor,
