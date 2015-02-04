@@ -111,5 +111,6 @@ class DogsVsCats(Dataset):
     def get_data(self, state=None, request=None):
         X, y = next(self.iterator)
         X = X.transpose(0, 3, 1, 2).reshape((100, -1))
+        y = np.concatenate((y, 1 - y), axis=1)
         return X, y
 
