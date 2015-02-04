@@ -3,6 +3,7 @@ __author__ = 'serdyuk'
 from itertools import chain
 
 from theano.tensor.nnet.conv import conv2d
+from theano.tensor.signal.downsample import max_pool_2d
 
 from blocks.bricks import WEIGHTS, Sequence, Initializable, Feedforward
 from blocks.bricks import lazy
@@ -13,17 +14,24 @@ from blocks.utils import shared_floatx_zeros
 
 class Convolutional(Initializable, Feedforward):
     @lazy
-    def __init__(self, conv_size, step, border_mode='valid', **kwargs):
+    def __init__(self, conv_size, num_featuremaps, num_channels,
+                 border_mode='valid', **kwargs):
         super(Convolutional, self).__init__(**kwargs)
         self.conv_size = conv_size
-        self.step = step
         self.border_mode = border_mode
+        self.num_featuremaps = num_featuremaps
+        self.num_channels = num_channels
 
     def _allocate(self):
-        W = shared_floatx_zeros((self.conv_size, self.conv_size), name='W')
+        W = shared_floatx_zeros((self.num_featuremaps, self.num_channels,
+                                 self.conv_size, self.conv_size), name='W')
         add_role(W, WEIGHTS)
         self.params.append(W)
         self.add_auxiliary_variable(W.norm(2), name='W_norm')
+
+    @property
+    def W(self):
+        return self.params[0]
 
     def _initialize(self):
         W, = self.params
@@ -31,7 +39,7 @@ class Convolutional(Initializable, Feedforward):
 
     @application(inputs=['input_'], outputs=['output'])
     def apply(self, input_):
-        """Apply the linear transformation.
+        """Apply the convolutional transformation.
 
         Parameters
         ----------
@@ -41,11 +49,36 @@ class Convolutional(Initializable, Feedforward):
         Returns
         -------
         output : :class:`~tensor.TensorVariable`
-            The transformed input plus optional bias
+            The transformed input
 
         """
         W, = self.params
         output = conv2d(input_, W, border_mode=self.border_mode)
+        return output
+
+
+class Pooling(Initializable, Feedforward):
+    @lazy
+    def __init__(self, pooling_size, **kwargs):
+        super(Pooling, self).__init__(**kwargs)
+        self.pooling_size = pooling_size
+
+    @application(inputs=['input_'], outputs=['output'])
+    def apply(self, input_):
+        """Apply the pooling (subsampling) transformation.
+
+        Parameters
+        ----------
+        input_ : :class:`~tensor.TensorVariable`
+            The input on which to apply the transformation
+
+        Returns
+        -------
+        output : :class:`~tensor.TensorVariable`
+            The transformed input
+
+        """
+        output = max_pool_2d(input_, (self.pooling_size, self.pooling_size))
         return output
 
 
@@ -54,11 +87,14 @@ class ConvMLP(Sequence, Initializable, Feedforward):
     def __init__(self, activations, dims, **kwargs):
         self.activations = activations
 
-        self.conv_transformations = [Convolutional(name='linear_{}'.format(i))
+        self.conv_transformations = [Convolutional(name='conv_{}'.format(i))
                                      for i in range(len(activations))]
+        self.subsamplings = [Pooling(name='pooling_{}'.format(i))
+                             for i in range(len(activations))]
         # Interleave the transformations and activations
         application_methods = [brick.apply for brick in list(chain(*zip(
-            self.conv_transformations, activations))) if brick is not None]
+            self.conv_transformations, self.subsamplings, activations)))
+            if brick is not None]
         if not dims:
             dims = [None] * (len(activations) + 1)
         self.dims = dims
