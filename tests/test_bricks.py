@@ -13,7 +13,7 @@ from cats_vs_dogs.bricks import ConvMLP, Convolutional, Pooling
 def test_convolutional():
     x = tensor.tensor4('x')
     n_channels = 4
-    conv = Convolutional(3, 3, n_channels, weights_init=Constant(1.))
+    conv = Convolutional((3, 3), 3, n_channels, weights_init=Constant(1.))
     conv.initialize()
     y = conv.apply(x)
     func = function([x], y)
@@ -29,7 +29,7 @@ def test_pooling():
     x_size = 17
     y_size = 13
     pool_size = 3
-    pool = Pooling(pool_size)
+    pool = Pooling((pool_size, pool_size))
     y = pool.apply(x)
     func = function([x], y)
 

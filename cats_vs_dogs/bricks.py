@@ -13,18 +13,30 @@ from blocks.utils import shared_floatx_zeros
 
 
 class Convolutional(Initializable, Feedforward):
+    """Convolutional layer.
+
+    Parameters
+    ----------
+        conv_size : a tuple (kernel x size, kernel y size)
+        num_featuremaps : number of feature maps
+        num_channels : number of input channels
+        step : a tuple (convolution step x, convolution step y)
+        border_mode : border mode 'valid' or 'full'
+    """
     @lazy
-    def __init__(self, conv_size, num_featuremaps, num_channels,
+    def __init__(self, conv_size, num_featuremaps, num_channels, step,
                  border_mode='valid', **kwargs):
         super(Convolutional, self).__init__(**kwargs)
         self.conv_size = conv_size
         self.border_mode = border_mode
         self.num_featuremaps = num_featuremaps
         self.num_channels = num_channels
+        self.step = step
 
     def _allocate(self):
+        conv_size_x, conv_size_y = self.conv_size
         W = shared_floatx_zeros((self.num_featuremaps, self.num_channels,
-                                 self.conv_size, self.conv_size), name='W')
+                                 conv_size_x, conv_size_y), name='W')
         add_role(W, WEIGHTS)
         self.params.append(W)
         self.add_auxiliary_variable(W.norm(2), name='W_norm')
@@ -49,11 +61,18 @@ class Convolutional(Initializable, Feedforward):
 
         """
         W, = self.params
-        output = conv2d(input_, W, border_mode=self.border_mode)
+        output = conv2d(input_, W, subsample=self.step,
+                        border_mode=self.border_mode)
         return output
 
 
 class Pooling(Initializable, Feedforward):
+    """Pooling layer.
+
+    Parameters
+    ----------
+        pooling_size : a tuple (pooling size x, pooling size y)
+    """
     @lazy
     def __init__(self, pooling_size, **kwargs):
         super(Pooling, self).__init__(**kwargs)
@@ -74,7 +93,7 @@ class Pooling(Initializable, Feedforward):
             The transformed input
 
         """
-        output = max_pool_2d(input_, (self.pooling_size, self.pooling_size))
+        output = max_pool_2d(input_, self.pooling_size)
         return output
 
 
