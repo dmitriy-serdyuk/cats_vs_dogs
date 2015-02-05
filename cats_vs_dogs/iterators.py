@@ -176,9 +176,10 @@ class DogsVsCats(Dataset):
         node = h5file.getNode('/', self.data_node)
 
         self.rescale = float(self.rescale)
-        X = node['X']
-        s = node['s']
-        y = node['y']
+        X = getattr(node, 'X')
+        s = getattr(node, 's')
+        y = getattr(node, 'y')
+        print 'data opened'
 
         return h5file, X, y, s
 
