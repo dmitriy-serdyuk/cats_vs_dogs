@@ -1,7 +1,6 @@
 import logging
 import os
 
-import theano
 from theano import tensor
 
 from blocks.bricks import MLP, Tanh, Softmax
@@ -21,10 +20,9 @@ logging.basicConfig()
 
 
 if __name__ == '__main__':
-    print 'building model...'
     dims = [221 * 221 * 3, 120, 2]
     mlp = MLP(activations=[Tanh(), Softmax()], dims=dims,
-              weights_init=IsotropicGaussian(0.01), biases_init=Constant(0))
+              weights_init=IsotropicGaussian(0.1), biases_init=Constant(0))
     mlp.initialize()
 
     x = tensor.matrix('X')
@@ -34,7 +32,6 @@ if __name__ == '__main__':
     error_rate = MisclassificationRate().apply(y[:, 0], y_hat)
 
     transformer = RandomCrop(256, 221)
-    print 'model built'
     train_dataset = DogsVsCats('train', os.path.join('${PYLEARN2_DATA_PATH}',
                                                      'dogs_vs_cats',
                                                      'train.h5'),
@@ -46,7 +43,6 @@ if __name__ == '__main__':
                                                    'dogs_vs_cats',
                                                    'train.h5'),
                               transformer)
-    print 'streams opened'
     test_stream = DataStream(
         dataset=test_dataset,
         iteration_scheme=SequentialScheme(train_dataset.num_examples, 100))
@@ -71,8 +67,7 @@ if __name__ == '__main__':
             cost=cost, step_rule=SteepestDescent(learning_rate=1.e-4)),
         extensions=[FinishAfter(after_n_epochs=50000),
                     train_monitor,
-                    valid_monitor,
-                    test_monitor,
+                    #valid_monitor,
+                    #test_monitor,
                     Printing()])
-    print 'main loop started'
     main_loop.run()

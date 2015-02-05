@@ -17,11 +17,11 @@ class Convolutional(Initializable, Feedforward):
 
     Parameters
     ----------
-        conv_size : a tuple (kernel x size, kernel y size)
-        num_featuremaps : number of feature maps
-        num_channels : number of input channels
-        step : a tuple (convolution step x, convolution step y)
-        border_mode : border mode 'valid' or 'full'
+    conv_size : a tuple (kernel x size, kernel y size)
+    num_featuremaps : number of feature maps
+    num_channels : number of input channels
+    step : a tuple (convolution step x, convolution step y)
+    border_mode : border mode 'valid' or 'full'
     """
     @lazy
     def __init__(self, conv_size, num_featuremaps, num_channels, step,
@@ -71,7 +71,7 @@ class Pooling(Initializable, Feedforward):
 
     Parameters
     ----------
-        pooling_size : a tuple (pooling size x, pooling size y)
+    pooling_size : a tuple (pooling size x, pooling size y)
     """
     @lazy
     def __init__(self, pooling_size, **kwargs):

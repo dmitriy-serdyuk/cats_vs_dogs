@@ -99,9 +99,10 @@ class DogsVsCats(Dataset):
         self.rescale = 256
         self.transformer = transformer
         self.floatX = theano.config.floatX
+        self.n_channels = 3
         if subset == 'train':
             self.start = 0
-            self.stop = 200
+            self.stop = 20000
         elif subset == 'valid':
             self.start = 20000
             self.stop = 22500
@@ -123,9 +124,11 @@ class DogsVsCats(Dataset):
         X = getattr(node, 'X')
         s = getattr(node, 's')
         y = getattr(node, 'y')
-        print 'data opened'
 
         return h5file, X, y, s
+
+    def next_epoch(self, state):
+        return state
 
     def close(self, state):
         h5file, _, _, _ = state
@@ -136,14 +139,15 @@ class DogsVsCats(Dataset):
 
     def get_data(self, state=None, request=None):
         indexes = slice(request[0] + self.start, request[-1] + 1 + self.start)
+        if indexes.stop > self.stop:
+            raise StopIteration
         _, X, y, s = state
         images = X[indexes]
         targets = y[indexes]
         shapes = s[indexes]
         out_shape = self.transformer.get_shape()
         shape_x, shape_y = out_shape
-        n_channels = images[0].shape[0] / shapes[0][0] / shapes[0][1]
-        X_buffer = np.zeros((len(request), shape_x, shape_y, n_channels),
+        X_buffer = np.zeros((len(request), shape_x, shape_y, self.n_channels),
                             dtype=self.floatX)
         for i, (img, s) in enumerate(izip(images, shapes)):
             # Transpose image in 'b01c' format to comply with
