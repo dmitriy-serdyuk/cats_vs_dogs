@@ -91,7 +91,7 @@ class BatchIterator(object):
 class DogsVsCats(Dataset):
     provides_sources = ['X', 'y']
 
-    def __init__(self, subset, path, transformer):
+    def __init__(self, subset, path, transformer, flatten=True):
         self.sources = ['X', 'y']
         self.subset = subset
         self.path = path
@@ -100,6 +100,7 @@ class DogsVsCats(Dataset):
         self.transformer = transformer
         self.floatX = theano.config.floatX
         self.n_channels = 3
+        self.flatten = flatten
         if subset == 'train':
             self.start = 0
             self.stop = 20000
@@ -156,7 +157,10 @@ class DogsVsCats(Dataset):
             # Assign i'th example in the batch with the preprocessed
             # image
             X_buffer[i] = self.transformer(b01c)
-        X = X_buffer.transpose(0, 3, 1, 2).reshape((len(request), -1))
+        if self.flatten:
+            X = X_buffer.transpose(0, 3, 1, 2).reshape((len(request), -1))
+        else:
+            X = X_buffer
         y = np.concatenate((targets, 1 - targets), axis=1)
         return X, y
 

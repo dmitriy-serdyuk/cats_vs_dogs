@@ -134,8 +134,12 @@ class ConvMLP(Sequence, Initializable, Feedforward):
     def _push_allocation_config(self):
         if not len(self.dims) - 1 == len(self.linear_transformations):
             raise ValueError
-        for input_dim, output_dim, layer in zip(self.dims[:-1], self.dims[1:],
-                                                self.linear_transformations):
+        for input_dim, output_dim, layer, pool_layer in \
+                zip(self.dims[:-1], self.dims[1:],
+                    self.conv_transformations,
+                    self.subsamplings):
+            # TODO: compute dimensions
             layer.input_dim = input_dim
             layer.output_dim = output_dim
             layer.use_bias = self.use_bias
+            pool_layer.input_dim

@@ -14,8 +14,10 @@ from blocks.extensions import FinishAfter, Printing
 from blocks.extensions.monitoring import DataStreamMonitoring
 from blocks.extensions.saveload import SerializeMainLoop
 
-from cats_vs_dogs.iterators import DogsVsCats
 from ift6266h15.code.pylearn2.datasets.variable_image_dataset import RandomCrop
+
+from cats_vs_dogs.iterators import DogsVsCats
+from cats_vs_dogs.bricks import Convolutional, Pooling, ConvMLP
 
 logging.basicConfig()
 
