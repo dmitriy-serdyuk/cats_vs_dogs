@@ -3,6 +3,7 @@ __author__ = 'dima'
 import os
 import cPickle as pkl
 from itertools import izip
+import tables
 
 import numpy as np
 from scipy import misc
@@ -10,6 +11,9 @@ from scipy import misc
 from blocks.datasets import Dataset
 from ift6266h15.code.pylearn2.datasets import variable_image_dataset
 from ift6266h15.code.pylearn2.datasets.variable_image_dataset import RandomCrop
+
+from pylearn2.utils.string_utils import preprocess
+from pylearn2.datasets import cache
 
 
 class SingleIterator(object):
@@ -85,9 +89,14 @@ class BatchIterator(object):
 class DogsVsCats(Dataset):
     provides_sources = ['X', 'y']
 
-    def __init__(self, subset):
+    def __init__(self, subset, path, transformer, floatX):
         self.sources = ['X', 'y']
         self.subset = subset
+        self.path = path
+        self.data_node = 'Data'
+        self.rescale = 256
+        self.transformer = transformer
+        self.floatX = floatX
         if subset == 'train':
             self.start = 0
             self.stop = 200
@@ -100,20 +109,43 @@ class DogsVsCats(Dataset):
         super(DogsVsCats, self).__init__(self.sources)
 
     def open(self):
-        container = variable_image_dataset.DogsVsCats(RandomCrop(256, 221),
-                                                      start=self.start,
-                                                      stop=self.stop)
-        iterator = container.iterator(
-            mode='batchwise_shuffled_sequential',
-            batch_size=100)
-        return iterator
+        # Locally cache the files before reading them
+        path = preprocess(self.path)
+        datasetCache = cache.datasetCache
+        path = datasetCache.cache_file(path)
+
+        h5file = tables.openFile(path, mode="r")
+        node = h5file.getNode('/', self.data_node)
+
+        self.rescale = float(self.rescale)
+        X = node['X']
+        s = node['s']
+        y = node['y']
+
+        return h5file, X, y, s
+
+    def close(self, state):
+        h5file, _, _, _ = state
+        h5file.close()
 
     def num_examples(self):
         return self.stop - self.start
 
     def get_data(self, state=None, request=None):
-        X, y = next(state)
-        X = X.transpose(0, 3, 1, 2).reshape((100, -1))
-        y = np.concatenate((y, 1 - y), axis=1)
+        _, X, y, s = state
+        images = X[request]
+        targets = y[request]
+        shapes = s[request]
+        X_buffer = np.zeros((len(request), shapes[0][0], shapes[0][1]),
+                            dtype=self.floatX)
+        for i, (img, s) in enumerate(izip(images, shapes)):
+            # Transpose image in 'b01c' format to comply with
+            # transformer interface
+            b01c = img.reshape(s)
+            # Assign i'th example in the batch with the preprocessed
+            # image
+            X_buffer[i] = self.transformer(b01c)
+        X = X_buffer.transpose(0, 3, 1, 2).reshape((len(request), -1))
+        y = np.concatenate((targets, 1 - targets), axis=1)
         return X, y
 
