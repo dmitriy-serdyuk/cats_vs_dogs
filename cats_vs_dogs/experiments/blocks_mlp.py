@@ -1,3 +1,4 @@
+import logging
 import os
 
 import theano
@@ -15,6 +16,8 @@ from blocks.extensions.monitoring import DataStreamMonitoring
 
 from cats_vs_dogs.iterators import DogsVsCats
 from ift6266h15.code.pylearn2.datasets.variable_image_dataset import RandomCrop
+
+logging.basicConfig()
 
 
 if __name__ == '__main__':

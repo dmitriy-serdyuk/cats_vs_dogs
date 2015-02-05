@@ -88,62 +88,6 @@ class BatchIterator(object):
         return np.array(images), np.array(labels)
 
 
-class Hdf5Dataset(Dataset):
-    provides_sources = ['X', 'y']
-
-    def __init__(self, subset, path, transformer, data_node, rescale, start,
-                 stop):
-        self.sources = ['X', 'y']
-        self.subset = subset
-        self.path = path
-        self.data_node = data_node
-        self.rescale = rescale
-        self.transformer = transformer
-        self.floatX = theano.config.floatX
-        self.start = start
-        self.stop = stop
-        super(Hdf5Dataset, self).__init__(self.sources)
-
-    def open(self):
-        # Locally cache the files before reading them
-        path = preprocess(self.path)
-        datasetCache = cache.datasetCache
-        path = datasetCache.cache_file(path)
-
-        h5file = tables.openFile(path, mode="r")
-        node = h5file.getNode('/', self.data_node)
-
-        self.rescale = float(self.rescale)
-
-        return h5file, node
-
-    def close(self, state):
-        h5file, _, _, _ = state
-        h5file.close()
-
-    def num_examples(self):
-        return self.stop - self.start
-
-    def get_data(self, state=None, request=None):
-        _, node = state
-        images = node['X'][request]
-        targets = node['y'][request]
-        shapes = node['s'][request]
-        X_buffer = np.zeros((len(request), shapes[0][0], shapes[0][1]),
-                            dtype=self.floatX)
-        for i, (img, s) in enumerate(izip(images, shapes)):
-            # Transpose image in 'b01c' format to comply with
-            # transformer interface
-            b01c = img.reshape(s)
-            # Assign i'th example in the batch with the preprocessed
-            # image
-            X_buffer[i] = self.transformer(b01c)
-        X = X_buffer.transpose(0, 3, 1, 2).reshape((len(request), -1))
-        y = np.concatenate((targets, 1 - targets), axis=1)
-        print X.shape, y.shape
-        return X, y
-
-
 class DogsVsCats(Dataset):
     provides_sources = ['X', 'y']
 
@@ -191,13 +135,15 @@ class DogsVsCats(Dataset):
         return self.stop - self.start
 
     def get_data(self, state=None, request=None):
+        indexes = slice(request[0] + self.start, request[-1] + 1 + self.start)
         _, X, y, s = state
-        images = X[request]
-        targets = y[request]
-        shapes = s[request]
+        images = X[indexes]
+        targets = y[indexes]
+        shapes = s[indexes]
         out_shape = self.transformer.get_shape()
         shape_x, shape_y = out_shape
-        X_buffer = np.zeros((len(request), shape_x, shape_y),
+        n_channels = images[0].shape[0] / shapes[0][0] / shapes[0][1]
+        X_buffer = np.zeros((len(request), shape_x, shape_y, n_channels),
                             dtype=self.floatX)
         for i, (img, s) in enumerate(izip(images, shapes)):
             # Transpose image in 'b01c' format to comply with
@@ -208,6 +154,5 @@ class DogsVsCats(Dataset):
             X_buffer[i] = self.transformer(b01c)
         X = X_buffer.transpose(0, 3, 1, 2).reshape((len(request), -1))
         y = np.concatenate((targets, 1 - targets), axis=1)
-        print X.shape, y.shape
         return X, y
 
