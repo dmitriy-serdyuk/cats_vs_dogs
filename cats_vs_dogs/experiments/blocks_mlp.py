@@ -12,6 +12,7 @@ from blocks.main_loop import MainLoop
 from blocks.algorithms import GradientDescent, SteepestDescent
 from blocks.extensions import FinishAfter, Printing
 from blocks.extensions.monitoring import DataStreamMonitoring
+from blocks.extensions.saveload import SerializeMainLoop
 
 from cats_vs_dogs.iterators import DogsVsCats
 from ift6266h15.code.pylearn2.datasets.variable_image_dataset import RandomCrop
@@ -67,7 +68,8 @@ if __name__ == '__main__':
             cost=cost, step_rule=SteepestDescent(learning_rate=1.e-4)),
         extensions=[FinishAfter(after_n_epochs=50000),
                     train_monitor,
-                    #valid_monitor,
-                    #test_monitor,
+                    valid_monitor,
+                    test_monitor,
+                    SerializeMainLoop('./models/main.pkl'),
                     Printing()])
     main_loop.run()
