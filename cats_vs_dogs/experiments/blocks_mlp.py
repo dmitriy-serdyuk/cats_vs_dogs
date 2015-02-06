@@ -32,12 +32,18 @@ def parse_args():
     parser.add_argument('--image-shape',
                         default=221,
                         help='Image shape')
+    parser.add_argument('--scaled-size',
+                        default=256,
+                        help='Scaled size')
     parser.add_argument('--channels',
                         default=3,
                         help='Number of channels')
     parser.add_argument('--batch-size',
                         default=100,
                         help='Batch size')
+    parser.add_argument('--epochs',
+                        default=50000,
+                        help='Number of epochs')
     return parser.parse_args()
 
 
@@ -55,13 +61,13 @@ if __name__ == '__main__':
     cost = CategoricalCrossEntropy().apply(y, y_hat)
     error_rate = MisclassificationRate().apply(y[:, 0], y_hat)
 
-    transformer = RandomCrop(256, args.image_shape)
     logging.info('.. model built')
+    rng = numpy.random.RandomState(2014 + 02 + 04)
+    transformer = RandomCrop(args.scaled_size, args.image_shape, rng)
     train_dataset = DogsVsCats('train', os.path.join('${PYLEARN2_DATA_PATH}',
                                                      'dogs_vs_cats',
                                                      'train.h5'),
                                transformer)
-    rng = numpy.random.RandomState(124)
     train_stream = DataStream(
         dataset=train_dataset,
         iteration_scheme=SequentialShuffledScheme(train_dataset.num_examples,
@@ -72,16 +78,16 @@ if __name__ == '__main__':
                               transformer)
     test_stream = DataStream(
         dataset=test_dataset,
-        iteration_scheme=SequentialShuffledScheme(train_dataset.num_examples,
-                                          args.batch_size, rng))
+        iteration_scheme=SequentialScheme(train_dataset.num_examples,
+                                          args.batch_size))
     valid_dataset = DogsVsCats('valid', os.path.join('${PYLEARN2_DATA_PATH}',
                                                      'dogs_vs_cats',
                                                      'train.h5'),
                                transformer)
     valid_stream = DataStream(
         dataset=valid_dataset,
-        iteration_scheme=SequentialShuffledScheme(train_dataset.num_examples,
-                                          args.batch_size, rng))
+        iteration_scheme=SequentialScheme(train_dataset.num_examples,
+                                          args.batch_size))
 
     train_monitor = DataStreamMonitoring(
         variables=[cost, error_rate], data_stream=train_stream, prefix="train")
@@ -94,7 +100,7 @@ if __name__ == '__main__':
         model=mlp, data_stream=train_stream,
         algorithm=GradientDescent(
             cost=cost, step_rule=Adam()),
-        extensions=[FinishAfter(after_n_epochs=50000),
+        extensions=[FinishAfter(after_n_epochs=args.epochs),
                     train_monitor,
                     valid_monitor,
                     test_monitor,
