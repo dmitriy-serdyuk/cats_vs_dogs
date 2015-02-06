@@ -2,6 +2,8 @@ import logging
 import os
 import argparse
 
+import numpy
+
 from theano import tensor
 
 from blocks.bricks import MLP, Tanh, Softmax
@@ -20,6 +22,7 @@ from ift6266h15.code.pylearn2.datasets.variable_image_dataset import RandomCrop
 from cats_vs_dogs.iterators import DogsVsCats
 from cats_vs_dogs.bricks import Convolutional, Pooling, ConvMLP
 from cats_vs_dogs.algorithms import Adam
+from cats_vs_dogs.schemes import SequentialShuffledScheme
 
 logging.basicConfig(level='INFO')
 
@@ -58,26 +61,27 @@ if __name__ == '__main__':
                                                      'dogs_vs_cats',
                                                      'train.h5'),
                                transformer)
+    rng = numpy.random.RandomState(124)
     train_stream = DataStream(
         dataset=train_dataset,
-        iteration_scheme=SequentialScheme(train_dataset.num_examples,
-                                          args.batch_size))
+        iteration_scheme=SequentialShuffledScheme(train_dataset.num_examples,
+                                          args.batch_size, rng))
     test_dataset = DogsVsCats('test', os.path.join('${PYLEARN2_DATA_PATH}',
                                                    'dogs_vs_cats',
                                                    'train.h5'),
                               transformer)
     test_stream = DataStream(
         dataset=test_dataset,
-        iteration_scheme=SequentialScheme(train_dataset.num_examples,
-                                          args.batch_size))
+        iteration_scheme=SequentialShuffledScheme(train_dataset.num_examples,
+                                          args.batch_size, rng))
     valid_dataset = DogsVsCats('valid', os.path.join('${PYLEARN2_DATA_PATH}',
                                                      'dogs_vs_cats',
                                                      'train.h5'),
                                transformer)
     valid_stream = DataStream(
         dataset=valid_dataset,
-        iteration_scheme=SequentialScheme(train_dataset.num_examples,
-                                          args.batch_size))
+        iteration_scheme=SequentialShuffledScheme(train_dataset.num_examples,
+                                          args.batch_size, rng))
 
     train_monitor = DataStreamMonitoring(
         variables=[cost, error_rate], data_stream=train_stream, prefix="train")

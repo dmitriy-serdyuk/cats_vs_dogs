@@ -103,13 +103,14 @@ class DogsVsCats(Dataset):
         self.flatten = flatten
         if subset == 'train':
             self.start = 0
-            self.stop = 20000
+            self.stop = 200
         elif subset == 'valid':
-            self.start = 20000
-            self.stop = 22500
+            self.start = 200
+            self.stop = 225
         elif subset == 'test':
-            self.start = 22500
-            self.stop = 25000
+            self.start = 225
+            self.stop = 250
+        self.num_examples = self.stop - self.start
         super(DogsVsCats, self).__init__(self.sources)
 
     def open(self):
@@ -135,10 +136,9 @@ class DogsVsCats(Dataset):
         h5file, _, _, _ = state
         h5file.close()
 
-    def num_examples(self):
-        return self.stop - self.start
-
     def get_data(self, state=None, request=None):
+        if not request:
+            raise StopIteration
         indexes = slice(request[0] + self.start, request[-1] + 1 + self.start)
         if indexes.stop > self.stop:
             raise StopIteration
