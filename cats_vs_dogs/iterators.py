@@ -111,30 +111,24 @@ class DogsVsCats(Dataset):
             self.start = 22500
             self.stop = 25000
         self.num_examples = self.stop - self.start
-        super(DogsVsCats, self).__init__(self.sources)
-
-    def open(self):
         # Locally cache the files before reading them
         path = preprocess(self.path)
         datasetCache = cache.datasetCache
-        path = datasetCache.cache_file(path)
-
-        h5file = tables.openFile(path, mode="r")
+        self.path = datasetCache.cache_file(path)
+        h5file = tables.openFile(self.path, mode="r")
         node = h5file.getNode('/', self.data_node)
 
         self.rescale = float(self.rescale)
-        X = getattr(node, 'X')
-        s = getattr(node, 's')
-        y = getattr(node, 'y')
+        self.X = getattr(node, 'X')
+        self.s = getattr(node, 's')
+        self.y = getattr(node, 'y')
+        super(DogsVsCats, self).__init__(self.sources)
 
-        return h5file, X, y, s
+    def open(self):
+        return self.X, self.y, self.s
 
     def next_epoch(self, state):
         return state
-
-    def close(self, state):
-        h5file, _, _, _ = state
-        h5file.close()
 
     def get_data(self, state=None, request=None):
         if not request:
@@ -142,7 +136,7 @@ class DogsVsCats(Dataset):
         indexes = slice(request[0] + self.start, request[-1] + 1 + self.start)
         if indexes.stop > self.stop:
             raise StopIteration
-        _, X, y, s = state
+        X, y, s = state
         images = X[indexes]
         targets = y[indexes]
         shapes = s[indexes]

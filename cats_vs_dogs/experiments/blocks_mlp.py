@@ -104,6 +104,7 @@ if __name__ == '__main__':
     extensions = []
     if args.load:
         extensions += [LoadFromDump(args.model_path)]
+        print 'load'
     extensions += [FinishAfter(after_n_epochs=args.epochs),
                    train_monitor,
                    valid_monitor,
