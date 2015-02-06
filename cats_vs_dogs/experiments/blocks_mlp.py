@@ -6,7 +6,7 @@ import numpy
 
 from theano import tensor
 
-from blocks.bricks import MLP, Tanh, Softmax
+from blocks.bricks import MLP, Tanh, Softmax, Rectifier
 from blocks.bricks.cost import CategoricalCrossEntropy, MisclassificationRate
 from blocks.initialization import IsotropicGaussian, Constant
 from blocks.datasets import DataStream
@@ -20,7 +20,7 @@ from blocks.extensions.saveload import SerializeMainLoop, LoadFromDump, Dump
 from ift6266h15.code.pylearn2.datasets.variable_image_dataset import RandomCrop
 
 from cats_vs_dogs.iterators import DogsVsCats
-from cats_vs_dogs.bricks import Convolutional, Pooling, ConvMLP
+from cats_vs_dogs.bricks import Convolutional, Pooling, ConvNN
 from cats_vs_dogs.algorithms import Adam
 from cats_vs_dogs.schemes import SequentialShuffledScheme
 
@@ -56,13 +56,17 @@ if __name__ == '__main__':
     args = parse_args()
     logging.info('.. starting')
     dims = [args.image_shape * args.image_shape * args.channels, 120, 2]
-    mlp = MLP(activations=[Tanh(), Softmax()], dims=dims,
-              weights_init=IsotropicGaussian(0.1), biases_init=Constant(0))
-    mlp.initialize()
+    input_dim = (args.channels, args.image_shape, args.image_shape)
+    model = ConvNN([Rectifier(), Rectifier()], input_dim,
+                   [(90, 3, 4, 4), (200, 90, 4, 4)],
+                   [(7, 7), (7, 7)], [Rectifier(), Softmax()], [500, 2],
+                   weights_init=IsotropicGaussian(0.1),
+                   biases_init=Constant(0.))
+    model.initialize()
 
-    x = tensor.matrix('X')
+    x = tensor.tensor4('X')
     y = tensor.lmatrix('y')
-    y_hat = mlp.apply(x)
+    y_hat = model.apply(x)
     cost = CategoricalCrossEntropy().apply(y, y_hat)
     error_rate = MisclassificationRate().apply(y[:, 0], y_hat)
 
@@ -113,7 +117,7 @@ if __name__ == '__main__':
                    Printing(),
                    Dump(args.model_path)]
     main_loop = MainLoop(
-        model=mlp, data_stream=train_stream,
+        model, data_stream=train_stream,
         algorithm=GradientDescent(
             cost=cost, step_rule=Adam()),
         extensions=extensions)

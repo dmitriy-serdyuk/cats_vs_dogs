@@ -91,7 +91,7 @@ class BatchIterator(object):
 class DogsVsCats(Dataset):
     provides_sources = ['X', 'y']
 
-    def __init__(self, subset, path, transformer, flatten=True):
+    def __init__(self, subset, path, transformer, flatten=False):
         self.sources = ['X', 'y']
         self.subset = subset
         self.path = path
@@ -154,7 +154,8 @@ class DogsVsCats(Dataset):
         if self.flatten:
             X = X_buffer.transpose(0, 3, 1, 2).reshape((len(request), -1))
         else:
-            X = X_buffer
+            X = X_buffer.transpose(0, 3, 1, 2)
         y = np.concatenate((targets, 1 - targets), axis=1)
         return X, y
+
 
