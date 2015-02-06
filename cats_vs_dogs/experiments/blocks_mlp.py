@@ -15,7 +15,7 @@ from blocks.main_loop import MainLoop
 from blocks.algorithms import GradientDescent, SteepestDescent
 from blocks.extensions import FinishAfter, Printing
 from blocks.extensions.monitoring import DataStreamMonitoring
-from blocks.extensions.saveload import SerializeMainLoop
+from blocks.extensions.saveload import SerializeMainLoop, LoadFromDump, Dump
 
 from ift6266h15.code.pylearn2.datasets.variable_image_dataset import RandomCrop
 
@@ -29,21 +29,26 @@ logging.basicConfig(level='INFO')
 
 def parse_args():
     parser = argparse.ArgumentParser("Cats vs Dogs training algorithm")
-    parser.add_argument('--image-shape',
+    parser.add_argument('--image-shape', type=int,
                         default=221,
                         help='Image shape')
-    parser.add_argument('--scaled-size',
+    parser.add_argument('--scaled-size', type=int,
                         default=256,
                         help='Scaled size')
-    parser.add_argument('--channels',
+    parser.add_argument('--channels', type=int,
                         default=3,
                         help='Number of channels')
-    parser.add_argument('--batch-size',
+    parser.add_argument('--batch-size', type=int,
                         default=100,
                         help='Batch size')
-    parser.add_argument('--epochs',
+    parser.add_argument('--epochs', type=int,
                         default=50000,
                         help='Number of epochs')
+    parser.add_argument('--load', action='store_true',
+                        default=False,
+                        help='Load the parameters')
+    parser.add_argument('--model-path',
+                        default='./models/model')
     return parser.parse_args()
 
 
@@ -96,14 +101,19 @@ if __name__ == '__main__':
     test_monitor = DataStreamMonitoring(
         variables=[cost, error_rate], data_stream=test_stream, prefix="test")
 
+    extensions = []
+    if args.load:
+        extensions += [LoadFromDump(args.model_path)]
+    extensions += [FinishAfter(after_n_epochs=args.epochs),
+                   train_monitor,
+                   valid_monitor,
+                   test_monitor,
+                   SerializeMainLoop('./models/main.pkl'),
+                   Printing(),
+                   Dump(args.model_path)]
     main_loop = MainLoop(
         model=mlp, data_stream=train_stream,
         algorithm=GradientDescent(
             cost=cost, step_rule=Adam()),
-        extensions=[FinishAfter(after_n_epochs=args.epochs),
-                    train_monitor,
-                    valid_monitor,
-                    test_monitor,
-                    SerializeMainLoop('./models/main.pkl'),
-                    Printing()])
+        extensions=extensions)
     main_loop.run()
