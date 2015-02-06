@@ -156,6 +156,6 @@ class DogsVsCats(Dataset):
         else:
             X = X_buffer.transpose(0, 3, 1, 2)
         y = np.concatenate((targets, 1 - targets), axis=1)
-        return X, y
+        return X / 256., y
 
 

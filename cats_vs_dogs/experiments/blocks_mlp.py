@@ -49,17 +49,19 @@ def parse_args():
                         help='Load the parameters')
     parser.add_argument('--model-path',
                         default='./models/model')
+    parser.add_argument('--use-adam', action='store_true',
+                        default=False,
+                        help='Use Adam optimizer')
     return parser.parse_args()
 
 
 if __name__ == '__main__':
     args = parse_args()
     logging.info('.. starting')
-    dims = [args.image_shape * args.image_shape * args.channels, 120, 2]
     input_dim = (args.channels, args.image_shape, args.image_shape)
     model = ConvNN([Rectifier(), Rectifier()], input_dim,
-                   [(10, 4, 4), (200, 4, 4)],
-                   [(7, 7), (7, 7)], [Rectifier(), Softmax()], [500, 2],
+                   [(10, 4, 4), (200, 4, 4)], [(7, 7), (7, 7)],
+                   [Rectifier(), Softmax()], [500, 2],
                    weights_init=IsotropicGaussian(0.1),
                    biases_init=Constant(0.))
     model.initialize()
@@ -108,7 +110,6 @@ if __name__ == '__main__':
     extensions = []
     if args.load:
         extensions += [LoadFromDump(args.model_path)]
-        print 'load'
     extensions += [FinishAfter(after_n_epochs=args.epochs),
                    train_monitor,
                    valid_monitor,
@@ -116,9 +117,14 @@ if __name__ == '__main__':
                    SerializeMainLoop('./models/main.pkl'),
                    Printing(),
                    Dump(args.model_path)]
+
+    if args.use_adam:
+        step_rule = Adam()
+    else:
+        step_rule = SteepestDescent(learning_rate=1.e-5)
     main_loop = MainLoop(
         model, data_stream=train_stream,
         algorithm=GradientDescent(
-            cost=cost, step_rule=Adam()),
+            cost=cost, step_rule=step_rule),
         extensions=extensions)
     main_loop.run()
