@@ -146,15 +146,16 @@ class ConvNN(Sequence, Initializable, Feedforward):
     def _push_allocation_config(self):
         if not len(self.conv_dims) == len(self.pooling_dims):
             raise ValueError('Dimension mismatch')
-        inp_conv_dims = [self.input_dim] + self.pooling_dims[:-1]
+        inp_conv_dims = [self.input_dim] + self.conv_dims[:-1]
         layer_list = zip(inp_conv_dims, self.conv_dims, self.pooling_dims,
                          self.conv_transformations, self.subsamplings)
         curr_output_dim = self.input_dim
         for conv_inp_dim, conv_out_dim, pool_dim, conv, pool in layer_list:
-            num_featuremaps, channels, size_x, size_y = conv_out_dim
+            num_channels, _, _ = conv_inp_dim
+            num_featuremaps, size_x, size_y = conv_out_dim
             conv.conv_size = (size_x, size_y)
             conv.num_featuremaps = num_featuremaps
-            conv.num_channels = channels
+            conv.num_channels = num_channels
             conv.step = self.conv_steps
 
             pool.pooling_size = pool_dim

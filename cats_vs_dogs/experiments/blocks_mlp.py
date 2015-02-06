@@ -58,7 +58,7 @@ if __name__ == '__main__':
     dims = [args.image_shape * args.image_shape * args.channels, 120, 2]
     input_dim = (args.channels, args.image_shape, args.image_shape)
     model = ConvNN([Rectifier(), Rectifier()], input_dim,
-                   [(90, 3, 4, 4), (200, 90, 4, 4)],
+                   [(10, 4, 4), (200, 4, 4)],
                    [(7, 7), (7, 7)], [Rectifier(), Softmax()], [500, 2],
                    weights_init=IsotropicGaussian(0.1),
                    biases_init=Constant(0.))
