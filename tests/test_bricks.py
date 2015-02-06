@@ -45,7 +45,7 @@ def test_conv_nn():
     # We test only dimension
     conv_mlp = ConvNN([Rectifier(), Rectifier()], (3, 200, 200),
                       [(10, 3, 4, 4), (20, 10, 5, 5)], [(7, 7), (7, 7)],
-                      [Softmax()], [20 * 4 * 4, 2],
+                      [Softmax()], [2],
                       weights_init=IsotropicGaussian(0.1),
                       biases_init=Constant(0.))
     conv_mlp.initialize()

@@ -1,6 +1,9 @@
 __author__ = 'serdyuk'
 
+import math
 from itertools import chain
+
+import numpy
 
 from theano.tensor.nnet.conv import conv2d
 from theano.tensor.signal.downsample import max_pool_2d
@@ -107,7 +110,9 @@ class Flattener(Brick):
 class ConvNN(Sequence, Initializable, Feedforward):
     @lazy
     def __init__(self, conv_activations, input_dim, conv_dims, pooling_dims,
-                 top_mlp_activations, top_mlp_dims, **kwargs):
+                 top_mlp_activations, top_mlp_dims, conv_steps=None, **kwargs):
+        if conv_steps == None:
+            self.conv_steps = (1, 1)
         self.conv_activations = conv_activations
         self.input_dim = input_dim
         self.conv_dims = conv_dims
@@ -144,14 +149,24 @@ class ConvNN(Sequence, Initializable, Feedforward):
         inp_conv_dims = [self.input_dim] + self.pooling_dims[:-1]
         layer_list = zip(inp_conv_dims, self.conv_dims, self.pooling_dims,
                          self.conv_transformations, self.subsamplings)
+        curr_output_dim = self.input_dim
         for conv_inp_dim, conv_out_dim, pool_dim, conv, pool in layer_list:
             num_featuremaps, channels, size_x, size_y = conv_out_dim
             conv.conv_size = (size_x, size_y)
             conv.num_featuremaps = num_featuremaps
             conv.num_channels = channels
-            conv.step = (1, 1)
+            conv.step = self.conv_steps
 
             pool.pooling_size = pool_dim
 
+            _, curr_x, curr_y = curr_output_dim
+            # TODO: consider case of full convolution, step != 1 and ignore
+            # border
+            curr_output_dim = (num_featuremaps,
+                               math.ceil((curr_x - size_x + 1) /
+                                         float(pool_dim[0])),
+                               math.ceil((curr_y - size_y + 1) /
+                                         float(pool_dim[1])))
+
         self.top_mlp.activations = self.top_mlp_activations
-        self.top_mlp.dims = self.top_mlp_dims
+        self.top_mlp.dims = [numpy.prod(curr_output_dim)] + self.top_mlp_dims
