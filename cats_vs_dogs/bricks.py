@@ -5,8 +5,8 @@ from itertools import chain
 from theano.tensor.nnet.conv import conv2d
 from theano.tensor.signal.downsample import max_pool_2d
 
-from blocks.bricks import WEIGHTS, Sequence, Initializable, Feedforward
-from blocks.bricks import lazy
+from blocks.bricks import WEIGHTS, Sequence, Initializable, Feedforward, Brick
+from blocks.bricks import lazy, MLP
 from blocks.bricks.base import application
 from blocks.roles import add_role, BIASES
 from blocks.utils import shared_floatx_zeros
@@ -97,49 +97,61 @@ class Pooling(Initializable, Feedforward):
         return output
 
 
-class ConvMLP(Sequence, Initializable, Feedforward):
+class Flattener(Brick):
+    @application(inputs=['input_'], outputs=['output'])
+    def apply(self, input_):
+        batch_size = input_.shape[0]
+        return input_.reshape((batch_size, -1))
+
+
+class ConvNN(Sequence, Initializable, Feedforward):
     @lazy
-    def __init__(self, activations, dims, **kwargs):
-        self.activations = activations
+    def __init__(self, conv_activations, input_dim, conv_dims, pooling_dims,
+                 top_mlp_activations, top_mlp_dims, **kwargs):
+        self.conv_activations = conv_activations
+        self.input_dim = input_dim
+        self.conv_dims = conv_dims
+        self.pooling_dims = pooling_dims
+        self.top_mlp_activations = top_mlp_activations
+        self.top_mlp_dims = top_mlp_dims
 
         self.conv_transformations = [Convolutional(name='conv_{}'.format(i))
-                                     for i in range(len(activations))]
+                                     for i in range(len(conv_activations))]
         self.subsamplings = [Pooling(name='pooling_{}'.format(i))
-                             for i in range(len(activations))]
+                             for i in range(len(conv_activations))]
+        self.top_mlp = MLP(top_mlp_activations, top_mlp_dims)
         # Interleave the transformations and activations
         application_methods = [brick.apply for brick in list(chain(*zip(
-            self.conv_transformations, self.subsamplings, activations)))
+            self.conv_transformations, self.subsamplings, conv_activations)))
             if brick is not None]
-        if not dims:
-            dims = [None] * (len(activations) + 1)
-        self.dims = dims
-        super(ConvMLP, self).__init__(application_methods, **kwargs)
-
-    @property
-    def input_dim(self):
-        return self.dims[0]
-
-    @input_dim.setter
-    def input_dim(self, value):
-        self.dims[0] = value
+        self.flattener = Flattener()
+        if len(top_mlp_activations) > 0:
+            application_methods += [self.flattener.apply]
+            application_methods += [self.top_mlp.apply]
+        super(ConvNN, self).__init__(application_methods, **kwargs)
 
     @property
     def output_dim(self):
-        return self.dims[-1]
+        return self.top_mlp_dims[-1]
 
     @output_dim.setter
     def output_dim(self, value):
-        self.dims[-1] = value
+        self.top_mlp_dims[-1] = value
 
     def _push_allocation_config(self):
-        if not len(self.dims) - 1 == len(self.linear_transformations):
-            raise ValueError
-        for input_dim, output_dim, layer, pool_layer in \
-                zip(self.dims[:-1], self.dims[1:],
-                    self.conv_transformations,
-                    self.subsamplings):
-            # TODO: compute dimensions
-            layer.input_dim = input_dim
-            layer.output_dim = output_dim
-            layer.use_bias = self.use_bias
-            pool_layer.input_dim
+        if not len(self.conv_dims) == len(self.pooling_dims):
+            raise ValueError('Dimension mismatch')
+        inp_conv_dims = [self.input_dim] + self.pooling_dims[:-1]
+        layer_list = zip(inp_conv_dims, self.conv_dims, self.pooling_dims,
+                         self.conv_transformations, self.subsamplings)
+        for conv_inp_dim, conv_out_dim, pool_dim, conv, pool in layer_list:
+            num_featuremaps, channels, size_x, size_y = conv_out_dim
+            conv.conv_size = (size_x, size_y)
+            conv.num_featuremaps = num_featuremaps
+            conv.num_channels = channels
+            conv.step = (1, 1)
+
+            pool.pooling_size = pool_dim
+
+        self.top_mlp.activations = self.top_mlp_activations
+        self.top_mlp.dims = self.top_mlp_dims
