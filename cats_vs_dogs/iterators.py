@@ -11,8 +11,6 @@ from scipy import misc
 import theano
 
 from blocks.datasets import Dataset
-from ift6266h15.code.pylearn2.datasets import variable_image_dataset
-from ift6266h15.code.pylearn2.datasets.variable_image_dataset import RandomCrop
 
 from pylearn2.utils.string_utils import preprocess
 from pylearn2.datasets import cache

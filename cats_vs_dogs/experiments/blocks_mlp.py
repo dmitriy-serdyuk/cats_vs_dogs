@@ -70,7 +70,7 @@ if __name__ == '__main__':
     y = tensor.lmatrix('y')
     y_hat = model.apply(x)
     cost = CategoricalCrossEntropy().apply(y, y_hat)
-    error_rate = MisclassificationRate().apply(y[:, 0], y_hat)
+    error_rate = MisclassificationRate().apply(tensor.argmax(y, axis=1), y_hat)
 
     logging.info('.. model built')
     rng = numpy.random.RandomState(2014 + 02 + 04)
@@ -116,7 +116,7 @@ if __name__ == '__main__':
                    test_monitor,
                    SerializeMainLoop('./models/main.pkl'),
                    Printing(),
-                   Dump(args.model_path)]
+                   Dump(args.model_path, after_every_epoch=True)]
 
     if args.use_adam:
         step_rule = Adam()
