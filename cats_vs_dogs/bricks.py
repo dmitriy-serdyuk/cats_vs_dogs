@@ -175,9 +175,11 @@ class ConvPool(Sequence, Initializable, Feedforward):
 class ConvNN(Sequence, Initializable, Feedforward):
     @lazy
     def __init__(self, conv_activations, input_dim, conv_dims, pooling_dims,
-                 top_mlp_activations, top_mlp_dims, conv_steps=None, **kwargs):
-        if conv_steps == None:
+                 top_mlp_activations, top_mlp_dims, conv_step=None, **kwargs):
+        if conv_step == None:
             self.conv_step = (1, 1)
+        else:
+            self.conv_step = conv_step
         self.conv_activations = conv_activations
         self.input_dim = input_dim
         self.conv_dims = conv_dims
