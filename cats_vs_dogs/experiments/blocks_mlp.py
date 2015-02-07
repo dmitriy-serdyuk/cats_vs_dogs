@@ -63,8 +63,11 @@ if __name__ == '__main__':
     logging.info('.. starting')
     input_dim = (args.channels, args.image_shape, args.image_shape)
     model = ConvNN([Rectifier(), Rectifier()], input_dim,
-                   [(10, 4, 4), (200, 4, 4)], [(7, 7), (7, 7)],
-                   [Rectifier(), Softmax()], [500, 2],
+                   [(96, 7, 7), (256, 7, 7), (384, 3, 3), (384, 3, 3),
+                    (256, 3, 3)],
+                   [(3, 3), (3, 3), (3, 3), (3, 3), (3, 3)],
+                   [Rectifier(), Rectifier(), Softmax()], [4096, 4096, 2],
+                   conv_steps=(2, 2),
                    weights_init=IsotropicGaussian(0.1),
                    biases_init=Constant(0.))
     model.initialize()

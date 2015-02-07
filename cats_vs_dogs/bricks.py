@@ -1,10 +1,10 @@
 __author__ = 'serdyuk'
 
-import math
 from itertools import chain
 
 import numpy
 
+from theano import tensor
 from theano.tensor.nnet.conv import conv2d
 from theano.tensor.signal.downsample import max_pool_2d
 
@@ -105,6 +105,15 @@ class Flattener(Brick):
     def apply(self, input_):
         batch_size = input_.shape[0]
         return input_.reshape((batch_size, -1))
+
+
+class ContrastNormalization(Brick):
+    @application(inputs=['input_'], outputs=['output'])
+    def apply(self, input_):
+        axises = tensor.arange(1, input_.ndim)
+        means = input_.mean(axis=axises)
+        output = input_ - means.dimshuffle(0, None * input_.ndim)
+        return output
 
 
 class ConvPool(Sequence, Initializable, Feedforward):
