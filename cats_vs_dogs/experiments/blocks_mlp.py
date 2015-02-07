@@ -4,6 +4,7 @@ import argparse
 
 import numpy
 
+import theano
 from theano import tensor
 
 from blocks.bricks import MLP, Tanh, Softmax, Rectifier
@@ -25,6 +26,7 @@ from cats_vs_dogs.bricks import Convolutional, Pooling, ConvNN
 from cats_vs_dogs.algorithms import Adam
 from cats_vs_dogs.schemes import SequentialShuffledScheme
 
+floatX = theano.config.floatX
 logging.basicConfig(level='INFO')
 
 
@@ -122,7 +124,7 @@ if __name__ == '__main__':
     if args.use_adam:
         step_rule = Adam()
     else:
-        step_rule = CompositeRule([GradientClipping(threshold=1000.),
+        step_rule = CompositeRule([GradientClipping(threshold=numpy.cast[floatX](1000.)),
                                    SteepestDescent(learning_rate=1.e-5)])
     main_loop = MainLoop(
         model, data_stream=train_stream,

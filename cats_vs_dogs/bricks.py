@@ -145,9 +145,11 @@ class ConvPool(Sequence, Initializable, Feedforward):
             # TODO: fix formula for step != 1
             out_dim = (inp_dim + conv_dim) / self.conv_step - 1
         if self.ignore_border:
-            out_dim = numpy.floor(out_dim / numpy.array(self.pool_size))
+            out_dim = numpy.floor(out_dim / numpy.array(self.pool_size,
+                                                        dtype=float))
         else:
-            out_dim = numpy.ceil(out_dim / numpy.array(self.pool_size))
+            out_dim = numpy.ceil(out_dim / numpy.array(self.pool_size,
+                                                       dtype=float))
 
         return num_featuremaps, out_dim[0], out_dim[1]
 
