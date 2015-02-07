@@ -100,7 +100,14 @@ class Pooling(Initializable):
         return output
 
 
-class Flattener(Brick):
+class Flattener(Feedforward):
+    def __init__(self):
+        self.input_dim = None
+
+    @property
+    def output_dim(self):
+        return numpy.prod(self.input_dim)
+
     @application(inputs=['input_'], outputs=['output'])
     def apply(self, input_):
         batch_size = input_.shape[0]
@@ -161,7 +168,27 @@ class ConvPool(Sequence, Initializable, Feedforward):
         self.pooling.ignore_border = self.ignore_border
 
 
-class ConvNN(Sequence, Initializable, Feedforward):
+class FeedforwardSequence(Sequence, Feedforward):
+    @lazy
+    def __init__(self, bricks, input_dim, **kwargs):
+        self.input_dim = input_dim
+        self.bricks = bricks
+        application_methods = [brick.apply for brick in bricks]
+        super(FeedforwardSequence, self).__init__(application_methods,
+                                                  **kwargs)
+
+    @property
+    def output_dim(self):
+        return self.bricks[-1].output_dim
+
+    def _push_allocation_config(self):
+        curr_input_dim = self.input_dim
+        for brick in self.bricks:
+            brick.input_dim = curr_input_dim
+            curr_input_dim = brick.output_dim
+
+
+class ConvNN(FeedforwardSequence, Initializable):
     @lazy
     def __init__(self, conv_activations, input_dim, conv_dims, pooling_dims,
                  top_mlp_activations, top_mlp_dims, conv_steps=None, **kwargs):
@@ -178,14 +205,14 @@ class ConvNN(Sequence, Initializable, Feedforward):
                                 for i in range(len(conv_activations))]
         self.top_mlp = MLP(top_mlp_activations, top_mlp_dims)
         # Interleave the transformations and activations
-        application_methods = [brick.apply for brick in list(chain(*zip(
+        bricks = [brick for brick in list(chain(*zip(
             self.transformations, conv_activations)))
-            if brick is not None]
+                  if brick is not None]
         self.flattener = Flattener()
         if len(top_mlp_activations) > 0:
-            application_methods += [self.flattener.apply]
-            application_methods += [self.top_mlp.apply]
-        super(ConvNN, self).__init__(application_methods, **kwargs)
+            bricks += [self.flattener]
+            bricks += [self.top_mlp]
+        super(ConvNN, self).__init__(bricks, input_dim, **kwargs)
 
     @property
     def output_dim(self):
@@ -201,15 +228,12 @@ class ConvNN(Sequence, Initializable, Feedforward):
         inp_conv_dims = [self.input_dim] + self.conv_dims[:-1]
         layer_list = zip(inp_conv_dims, self.conv_dims, self.pooling_dims,
                          self.transformations)
-        curr_output_dim = self.input_dim
         for conv_inp_dim, conv_dim, pool_dim, layer in layer_list:
             num_channels, _, _ = conv_inp_dim
-            layer.input_dim = curr_output_dim
             layer.conv_size = conv_dim
             layer.conv_step = self.conv_step
             layer.pool_size = pool_dim
 
-            curr_output_dim = layer.output_dim
-
         self.top_mlp.activations = self.top_mlp_activations
-        self.top_mlp.dims = [numpy.prod(curr_output_dim)] + self.top_mlp_dims
+        self.top_mlp.dims = [self.bricks[-2].output_dim] + self.top_mlp_dims
+        super(ConvNN, self)._push_allocation_config()
