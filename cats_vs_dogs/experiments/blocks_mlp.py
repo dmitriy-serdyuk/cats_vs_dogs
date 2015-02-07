@@ -12,7 +12,8 @@ from blocks.initialization import IsotropicGaussian, Constant
 from blocks.datasets import DataStream
 from blocks.datasets.schemes import SequentialScheme
 from blocks.main_loop import MainLoop
-from blocks.algorithms import GradientDescent, SteepestDescent
+from blocks.algorithms import (GradientDescent, SteepestDescent, CompositeRule,
+                               GradientClipping)
 from blocks.extensions import FinishAfter, Printing
 from blocks.extensions.monitoring import DataStreamMonitoring
 from blocks.extensions.saveload import SerializeMainLoop, LoadFromDump, Dump
@@ -121,7 +122,8 @@ if __name__ == '__main__':
     if args.use_adam:
         step_rule = Adam()
     else:
-        step_rule = SteepestDescent(learning_rate=1.e-5)
+        step_rule = CompositeRule([GradientClipping(threshold=1000.),
+                                   SteepestDescent(learning_rate=1.e-5)])
     main_loop = MainLoop(
         model, data_stream=train_stream,
         algorithm=GradientDescent(

@@ -15,7 +15,7 @@ from blocks.roles import add_role, BIASES
 from blocks.utils import shared_floatx_zeros
 
 
-class Convolutional(Initializable, Feedforward):
+class Convolutional(Initializable):
     """Convolutional layer.
 
     Parameters
@@ -27,18 +27,17 @@ class Convolutional(Initializable, Feedforward):
     border_mode : border mode 'valid' or 'full'
     """
     @lazy
-    def __init__(self, conv_size, num_featuremaps, num_channels, step,
+    def __init__(self, conv_size, num_channels, step,
                  border_mode='valid', **kwargs):
         super(Convolutional, self).__init__(**kwargs)
         self.conv_size = conv_size
         self.border_mode = border_mode
-        self.num_featuremaps = num_featuremaps
         self.num_channels = num_channels
         self.step = step
 
     def _allocate(self):
-        conv_size_x, conv_size_y = self.conv_size
-        W = shared_floatx_zeros((self.num_featuremaps, self.num_channels,
+        num_featuremaps, conv_size_x, conv_size_y = self.conv_size
+        W = shared_floatx_zeros((num_featuremaps, self.num_channels,
                                  conv_size_x, conv_size_y), name='W')
         add_role(W, WEIGHTS)
         self.params.append(W)
@@ -69,7 +68,7 @@ class Convolutional(Initializable, Feedforward):
         return output
 
 
-class Pooling(Initializable, Feedforward):
+class Pooling(Initializable):
     """Pooling layer.
 
     Parameters
@@ -77,9 +76,10 @@ class Pooling(Initializable, Feedforward):
     pooling_size : a tuple (pooling size x, pooling size y)
     """
     @lazy
-    def __init__(self, pooling_size, **kwargs):
+    def __init__(self, pooling_size, ignore_border=False, **kwargs):
         super(Pooling, self).__init__(**kwargs)
         self.pooling_size = pooling_size
+        self.ignore_border = ignore_border
 
     @application(inputs=['input_'], outputs=['output'])
     def apply(self, input_):
@@ -96,7 +96,7 @@ class Pooling(Initializable, Feedforward):
             The transformed input
 
         """
-        output = max_pool_2d(input_, self.pooling_size)
+        output = max_pool_2d(input_, self.pooling_size, self.ignore_border)
         return output
 
 
@@ -107,12 +107,66 @@ class Flattener(Brick):
         return input_.reshape((batch_size, -1))
 
 
+class ConvPool(Sequence, Initializable, Feedforward):
+    @lazy
+    def __init__(self, input_dim, conv_size, conv_step, pool_size,
+                 conv_type='valid', ignore_border=False, **kwargs):
+        self.input_dim = input_dim
+        self.conv_size = conv_size
+        self.pool_size = pool_size
+        self.conv_type = conv_type
+        self.ignore_border = ignore_border
+        self.conv_step = conv_step
+
+        if conv_size is not None:
+            num_featuremaps, conv_size = conv_size[0], conv_size[1:]
+        else:
+            num_featuremaps, conv_size = None, None
+        if input_dim is not None:
+            num_channels, _, _ = input_dim
+        else:
+            num_channels = None
+        self.convolution = Convolutional(conv_size, num_featuremaps,
+                                         num_channels, conv_step, name='conv')
+        self.pooling = Pooling(pool_size, name='pooling')
+        application_methods = [self.convolution.apply, self.pooling.apply]
+        super(ConvPool, self).__init__(application_methods, **kwargs)
+
+
+    @property
+    def output_dim(self):
+        inp_dim = numpy.array(self.input_dim[1:])
+        num_featuremaps = self.conv_size[0]
+        conv_dim = numpy.array(self.conv_size[1:])
+
+        if self.conv_type == 'valid':
+            out_dim = (inp_dim - conv_dim) / self.conv_step + 1
+        else:
+            # TODO: fix formula for step != 1
+            out_dim = (inp_dim + conv_dim) / self.conv_step - 1
+        if self.ignore_border:
+            out_dim = numpy.floor(out_dim / numpy.array(self.pool_size))
+        else:
+            out_dim = numpy.ceil(out_dim / numpy.array(self.pool_size))
+
+        return num_featuremaps, out_dim[0], out_dim[1]
+
+    def push_allocation_config(self):
+        self.convolution.conv_size = self.conv_size
+        self.convolution.border_mode = self.conv_type
+        self.convolution.num_channels = self.input_dim[0]
+        self.convolution.step = self.conv_step
+
+        self.pooling.pooling_size = self.pool_size
+        self.pooling.ignore_border = self.ignore_border
+
+
 class ConvNN(Sequence, Initializable, Feedforward):
     @lazy
     def __init__(self, conv_activations, input_dim, conv_dims, pooling_dims,
                  top_mlp_activations, top_mlp_dims, conv_steps=None, **kwargs):
         if conv_steps == None:
-            self.conv_steps = (1, 1)
+            self.conv_step = (1, 1)
         self.conv_activations = conv_activations
         self.input_dim = input_dim
         self.conv_dims = conv_dims
@@ -120,14 +174,12 @@ class ConvNN(Sequence, Initializable, Feedforward):
         self.top_mlp_activations = top_mlp_activations
         self.top_mlp_dims = top_mlp_dims
 
-        self.conv_transformations = [Convolutional(name='conv_{}'.format(i))
-                                     for i in range(len(conv_activations))]
-        self.subsamplings = [Pooling(name='pooling_{}'.format(i))
-                             for i in range(len(conv_activations))]
+        self.transformations = [ConvPool(name='conv_pool_{}'.format(i))
+                                for i in range(len(conv_activations))]
         self.top_mlp = MLP(top_mlp_activations, top_mlp_dims)
         # Interleave the transformations and activations
         application_methods = [brick.apply for brick in list(chain(*zip(
-            self.conv_transformations, self.subsamplings, conv_activations)))
+            self.transformations, conv_activations)))
             if brick is not None]
         self.flattener = Flattener()
         if len(top_mlp_activations) > 0:
@@ -148,26 +200,16 @@ class ConvNN(Sequence, Initializable, Feedforward):
             raise ValueError('Dimension mismatch')
         inp_conv_dims = [self.input_dim] + self.conv_dims[:-1]
         layer_list = zip(inp_conv_dims, self.conv_dims, self.pooling_dims,
-                         self.conv_transformations, self.subsamplings)
+                         self.transformations)
         curr_output_dim = self.input_dim
-        for conv_inp_dim, conv_out_dim, pool_dim, conv, pool in layer_list:
+        for conv_inp_dim, conv_dim, pool_dim, layer in layer_list:
             num_channels, _, _ = conv_inp_dim
-            num_featuremaps, size_x, size_y = conv_out_dim
-            conv.conv_size = (size_x, size_y)
-            conv.num_featuremaps = num_featuremaps
-            conv.num_channels = num_channels
-            conv.step = self.conv_steps
+            layer.input_dim = curr_output_dim
+            layer.conv_size = conv_dim
+            layer.conv_step = self.conv_step
+            layer.pool_size = pool_dim
 
-            pool.pooling_size = pool_dim
-
-            _, curr_x, curr_y = curr_output_dim
-            # TODO: consider case of full convolution, step != 1 and ignore
-            # border
-            curr_output_dim = (num_featuremaps,
-                               math.ceil((curr_x - size_x + 1) /
-                                         float(pool_dim[0])),
-                               math.ceil((curr_y - size_y + 1) /
-                                         float(pool_dim[1])))
+            curr_output_dim = layer.output_dim
 
         self.top_mlp.activations = self.top_mlp_activations
         self.top_mlp.dims = [numpy.prod(curr_output_dim)] + self.top_mlp_dims
