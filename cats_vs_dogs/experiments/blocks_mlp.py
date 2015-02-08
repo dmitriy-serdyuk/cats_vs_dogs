@@ -18,6 +18,7 @@ from blocks.algorithms import (GradientDescent, SteepestDescent, CompositeRule,
 from blocks.extensions import FinishAfter, Printing
 from blocks.extensions.monitoring import DataStreamMonitoring
 from blocks.extensions.saveload import SerializeMainLoop, LoadFromDump, Dump
+from cats_vs_dogs.extentions import DumpWeights, LoadWeights
 
 from ift6266h15.code.pylearn2.datasets.variable_image_dataset import RandomCrop
 
@@ -125,14 +126,14 @@ if __name__ == '__main__':
 
     extensions = []
     if args.load:
-        extensions += [LoadFromDump(args.model_path)]
+        extensions += [LoadWeights(args.model_path)]
     extensions += [FinishAfter(after_n_epochs=args.epochs),
                    train_monitor,
                    valid_monitor,
                    test_monitor,
                    SerializeMainLoop('./models/main.pkl'),
                    Printing(),
-                   Dump(args.model_path)]
+                   DumpWeights(args.model_path, after_every_epoch=True, before_first_epoch=True)]
 
     if args.use_adam:
         step_rule = Adam()
