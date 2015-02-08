@@ -55,6 +55,18 @@ def parse_args():
     parser.add_argument('--use-adam', action='store_true',
                         default=False,
                         help='Use Adam optimizer')
+    parser.add_argument('--feature-maps', nargs='+', type=int,
+                        default=[25, 50, 100],
+                        help='Number of feature maps for layers')
+    parser.add_argument('--conv-sizes', nargs='+', type=int,
+                        default=[7, 5, 3],
+                        help='Convolution sizes for layers')
+    parser.add_argument('--pool-sizes', nargs='+', type=int,
+                        default=[3, 3, 3],
+                        help='Pooling sizes for layers')
+    parser.add_argument('--mlp-hiddens', nargs='+', type=int,
+                        default=[500],
+                        help='Number of hidden units in full connected layers')
     return parser.parse_args()
 
 
@@ -63,11 +75,9 @@ if __name__ == '__main__':
     logging.info('.. starting')
     input_dim = (args.channels, args.image_shape, args.image_shape)
     model = ConvNN([Rectifier(), Rectifier()], input_dim,
-                   [(96, 7, 7), (256, 7, 7), (384, 3, 3), (384, 3, 3),
-                    (256, 3, 3)],
-                   [(3, 3), (3, 3), (3, 3), (3, 3), (3, 3)],
-                   [Rectifier(), Rectifier(), Softmax()], [4096, 4096, 2],
-                   conv_steps=(2, 2),
+                   zip(args.feature_maps, args.conv_sizes, args.conv_sizes),
+                   zip(args.pool_sizes, args.pool_sizes),
+                   [Rectifier(), Softmax()], args.mlp_hiddens + [2],
                    weights_init=IsotropicGaussian(0.1),
                    biases_init=Constant(0.))
     model.initialize()
