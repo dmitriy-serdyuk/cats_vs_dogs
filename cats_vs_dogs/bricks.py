@@ -5,8 +5,8 @@ from itertools import chain
 import numpy
 
 from theano import tensor
-from theano.tensor.nnet.conv import conv2d
-from theano.tensor.signal.downsample import max_pool_2d
+from theano.tensor.nnet.conv import conv2d, ConvOp
+from theano.tensor.signal.downsample import max_pool_2d, DownsampleFactorMax
 
 from blocks.bricks import WEIGHTS, Sequence, Initializable, Feedforward, Brick
 from blocks.bricks import lazy, MLP
@@ -148,17 +148,10 @@ class ConvPool(Sequence, Initializable, Feedforward):
         num_featuremaps = self.conv_size[0]
         conv_dim = numpy.array(self.conv_size[1:])
 
-        if self.conv_type == 'valid':
-            out_dim = (inp_dim - conv_dim) / self.conv_step + 1
-        else:
-            # TODO: fix formula for step != 1
-            out_dim = (inp_dim + conv_dim) / self.conv_step - 1
-        if self.ignore_border:
-            out_dim = numpy.floor(out_dim / numpy.array(self.pool_size,
-                                                        dtype=float))
-        else:
-            out_dim = numpy.ceil(out_dim / numpy.array(self.pool_size,
-                                                       dtype=float))
+        out_dim = ConvOp.getOutputShape(inp_dim, conv_dim, self.conv_step,
+                                        self.conv_type)
+        out_dim = DownsampleFactorMax.out_shape(out_dim, self.pool_size,
+                                                self.ignore_border)
 
         return num_featuremaps, out_dim[0], out_dim[1]
 

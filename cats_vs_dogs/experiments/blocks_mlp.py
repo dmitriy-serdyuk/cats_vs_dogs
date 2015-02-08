@@ -133,7 +133,8 @@ if __name__ == '__main__':
                    test_monitor,
                    SerializeMainLoop('./models/main.pkl'),
                    Printing(),
-                   DumpWeights(args.model_path, after_every_epoch=True, before_first_epoch=True)]
+                   DumpWeights(args.model_path, after_every_epoch=True,
+                               before_first_epoch=True)]
 
     if args.use_adam:
         step_rule = Adam()
