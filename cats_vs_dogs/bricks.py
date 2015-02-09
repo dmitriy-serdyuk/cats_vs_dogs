@@ -144,9 +144,9 @@ class ConvPool(Sequence, Initializable, Feedforward):
 
     @property
     def output_dim(self):
-        inp_dim = numpy.array(self.input_dim[1:])
+        inp_dim = self.input_dim[1:]
         num_featuremaps = self.conv_size[0]
-        conv_dim = numpy.array(self.conv_size[1:])
+        conv_dim = self.conv_size[1:]
 
         out_dim = ConvOp.getOutputShape(inp_dim, conv_dim, self.conv_step,
                                         self.conv_type)
