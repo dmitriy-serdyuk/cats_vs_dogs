@@ -124,19 +124,13 @@ class DogsVsCats(Dataset):
         self.y = getattr(node, 'y')
         super(DogsVsCats, self).__init__(self.sources)
 
-    def open(self):
-        return self.X, self.y, self.s
-
-    def next_epoch(self, state):
-        return state
-
     def get_data(self, state=None, request=None):
         if not request:
             raise StopIteration
         indexes = slice(request[0] + self.start, request[-1] + 1 + self.start)
         if indexes.stop > self.stop:
             raise StopIteration
-        X, y, s = state
+        X, y, s = self.X, self.y, self.s
         images = X[indexes]
         targets = y[indexes]
         shapes = s[indexes]
