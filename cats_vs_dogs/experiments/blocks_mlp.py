@@ -75,10 +75,11 @@ if __name__ == '__main__':
     args = parse_args()
     logging.info('.. starting')
     input_dim = (args.channels, args.image_shape, args.image_shape)
+    mlp_activations = [Rectifier() for _ in args.mlp_hiddens] + [Softmax()]
     model = ConvNN([Rectifier(), Rectifier()], input_dim,
                    zip(args.feature_maps, args.conv_sizes, args.conv_sizes),
                    zip(args.pool_sizes, args.pool_sizes),
-                   [Rectifier(), Softmax()], args.mlp_hiddens + [2],
+                   mlp_activations, args.mlp_hiddens + [2],
                    weights_init=IsotropicGaussian(0.1),
                    biases_init=Constant(0.))
     model.initialize()
