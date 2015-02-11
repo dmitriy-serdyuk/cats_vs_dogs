@@ -158,10 +158,9 @@ if __name__ == '__main__':
                    train_monitor,
                    valid_monitor,
                    test_monitor,
-                   SerializeMainLoop('./models/main.pkl'),
                    Printing(),
-                   Dump(config.model_path, after_every_epoch=True,
-                        before_first_epoch=True)]
+                   DumpWeights(config.model_path, after_every_epoch=True,
+                               before_first_epoch=True)]
     main_loop = MainLoop(model, data_stream=train_stream, algorithm=algorithm,
                          extensions=extensions)
     main_loop.run()
