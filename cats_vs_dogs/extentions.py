@@ -94,8 +94,8 @@ class AdjustParameter(TrainingExtension):
         super(AdjustParameter, self).__init__(**kwargs)
         self.learning_rate = parameter
         self.function = function
-        self.num_iterations = 0
+        self.num_examples = 0
 
     def before_batch(self, batch):
-        self.num_iterations += 1
-        self.learning_rate.set_value(self.function(self.num_iterations))
+        self.num_examples += batch.shape[0]
+        self.learning_rate.set_value(self.function(self.num_examples))

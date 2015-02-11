@@ -155,7 +155,7 @@ if __name__ == '__main__':
         sgd = SteepestDescent(learning_rate=config.learning_rate)
         step_rule = CompositeRule([clipping, sgd])
         adjust_learning_rate = AdjustParameter(sgd.learning_rate,
-                                                  lambda n: 100. / (100. + n))
+                                               lambda n: 200. / (20000. + n))
         extensions += [adjust_learning_rate]
     main_loop = MainLoop(
         model, data_stream=train_stream,
