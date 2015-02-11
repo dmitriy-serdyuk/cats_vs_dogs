@@ -10,14 +10,16 @@ from theano import tensor
 
 from blocks.bricks import MLP, Tanh, Softmax, Rectifier
 from blocks.bricks.cost import CategoricalCrossEntropy, MisclassificationRate
-from blocks.initialization import IsotropicGaussian, Constant
 from blocks.datasets import DataStream
 from blocks.datasets.schemes import SequentialScheme
+from blocks.initialization import IsotropicGaussian, Constant
 from blocks.main_loop import MainLoop
+from blocks.monitoring import aggregation
 from blocks.algorithms import (GradientDescent, SteepestDescent, CompositeRule,
                                GradientClipping)
 from blocks.extensions import FinishAfter, Printing
-from blocks.extensions.monitoring import DataStreamMonitoring
+from blocks.extensions.monitoring import (DataStreamMonitoring,
+                                          TrainingDataMonitoring)
 from blocks.extensions.saveload import SerializeMainLoop, LoadFromDump, Dump
 from blocks.config_parser import Configuration
 
@@ -27,7 +29,7 @@ from cats_vs_dogs.iterators import DogsVsCats
 from cats_vs_dogs.bricks import Convolutional, Pooling, ConvNN
 from cats_vs_dogs.algorithms import Adam
 from cats_vs_dogs.schemes import SequentialShuffledScheme
-from cats_vs_dogs.extentions import (DumpWeights, LoadWeights,
+from cats_vs_dogs.extensions import (DumpWeights, LoadWeights,
                                      AdjustParameter)
 
 floatX = theano.config.floatX
@@ -129,8 +131,6 @@ if __name__ == '__main__':
         iteration_scheme=SequentialScheme(train_dataset.num_examples,
                                           config.batch_size))
 
-    train_monitor = DataStreamMonitoring(
-        variables=[cost, error_rate], data_stream=train_stream, prefix="train")
     valid_monitor = DataStreamMonitoring(
         variables=[cost, error_rate], data_stream=valid_stream, prefix="valid")
     test_monitor = DataStreamMonitoring(
@@ -139,14 +139,6 @@ if __name__ == '__main__':
     extensions = []
     if config.load:
         extensions += [LoadWeights(config.model_path)]
-    extensions += [FinishAfter(after_n_epochs=config.epochs),
-                   train_monitor,
-                   valid_monitor,
-                   test_monitor,
-                   SerializeMainLoop('./models/main.pkl'),
-                   Printing(),
-                   Dump(config.model_path, after_every_epoch=True,
-                               before_first_epoch=True)]
 
     if config.use_adam:
         step_rule = Adam()
@@ -157,9 +149,19 @@ if __name__ == '__main__':
         adjust_learning_rate = AdjustParameter(sgd.learning_rate,
                                                lambda n: 200. / (20000. + n))
         extensions += [adjust_learning_rate]
-    main_loop = MainLoop(
-        model, data_stream=train_stream,
-        algorithm=GradientDescent(
-            cost=cost, step_rule=step_rule),
-        extensions=extensions)
+    algorithm = GradientDescent(cost=cost, step_rule=step_rule)
+    train_monitor = TrainingDataMonitoring(
+        variables=[cost, error_rate,
+                   aggregation.mean(algorithm.total_gradient_norm)],
+        prefix="train", after_every_epoch=True)
+    extensions += [FinishAfter(after_n_epochs=config.epochs),
+                   train_monitor,
+                   valid_monitor,
+                   test_monitor,
+                   SerializeMainLoop('./models/main.pkl'),
+                   Printing(),
+                   Dump(config.model_path, after_every_epoch=True,
+                        before_first_epoch=True)]
+    main_loop = MainLoop(model, data_stream=train_stream, algorithm=algorithm,
+                         extensions=extensions)
     main_loop.run()

@@ -79,7 +79,7 @@ class LoadWeights(TrainingExtension):
 
 
 class AdjustParameter(TrainingExtension):
-    """Adjusts every iteration shared variable parameter using some function
+    """Adjusts shared variable parameter using some function each iteration
 
     This class can be used to adapt over the training process parameters like
     learning rate, momentum, etc.
@@ -87,8 +87,8 @@ class AdjustParameter(TrainingExtension):
     Parameters
     ----------
     parameter : shared variable to be adjusted
-    function : function which input number of iterations and outputs the
-               parameter value
+    function : function which input number of aggregated examples and outputs
+               the parameter value
     """
     def __init__(self, parameter, function, **kwargs):
         super(AdjustParameter, self).__init__(**kwargs)
