@@ -96,6 +96,6 @@ class AdjustParameter(TrainingExtension):
         self.function = function
         self.num_examples = 0
 
-    def before_batch(self, batch):
-        self.num_examples += batch.shape[0]
+    def after_batch(self, batch):
+        self.num_examples += batch.values()[0].shape[0]
         self.learning_rate.set_value(self.function(self.num_examples))

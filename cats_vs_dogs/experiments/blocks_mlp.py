@@ -140,9 +140,9 @@ if __name__ == '__main__':
     if config.load:
         extensions += [LoadWeights(config.model_path)]
     extensions += [FinishAfter(after_n_epochs=config.epochs),
-                   #train_monitor,
-                   #valid_monitor,
-                   #test_monitor,
+                   train_monitor,
+                   valid_monitor,
+                   test_monitor,
                    SerializeMainLoop('./models/main.pkl'),
                    Printing(),
                    Dump(config.model_path, after_every_epoch=True,
