@@ -27,7 +27,8 @@ from cats_vs_dogs.iterators import DogsVsCats
 from cats_vs_dogs.bricks import Convolutional, Pooling, ConvNN
 from cats_vs_dogs.algorithms import Adam
 from cats_vs_dogs.schemes import SequentialShuffledScheme
-from cats_vs_dogs.extentions import DumpWeights, LoadWeights
+from cats_vs_dogs.extentions import (DumpWeights, LoadWeights,
+                                     AdjustParameter)
 
 floatX = theano.config.floatX
 logging.basicConfig(level='INFO')
@@ -139,9 +140,9 @@ if __name__ == '__main__':
     if config.load:
         extensions += [LoadWeights(config.model_path)]
     extensions += [FinishAfter(after_n_epochs=config.epochs),
-                   train_monitor,
-                   valid_monitor,
-                   test_monitor,
+                   #train_monitor,
+                   #valid_monitor,
+                   #test_monitor,
                    SerializeMainLoop('./models/main.pkl'),
                    Printing(),
                    Dump(config.model_path, after_every_epoch=True,
@@ -150,8 +151,12 @@ if __name__ == '__main__':
     if config.use_adam:
         step_rule = Adam()
     else:
-        step_rule = CompositeRule([GradientClipping(threshold=numpy.cast[floatX](1000.)),
-                                   SteepestDescent(learning_rate=config.learning_rate)])
+        clipping = GradientClipping(threshold=numpy.cast[floatX](1000.))
+        sgd = SteepestDescent(learning_rate=config.learning_rate)
+        step_rule = CompositeRule([clipping, sgd])
+        adjust_learning_rate = AdjustParameter(sgd.learning_rate,
+                                                  lambda n: 100. / (100. + n))
+        extensions += [adjust_learning_rate]
     main_loop = MainLoop(
         model, data_stream=train_stream,
         algorithm=GradientDescent(

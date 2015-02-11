@@ -77,3 +77,25 @@ class LoadWeights(TrainingExtension):
         except:
             reraise_as("Failed to load the state")
 
+
+class AdjustParameter(TrainingExtension):
+    """Adjusts every iteration shared variable parameter using some function
+
+    This class can be used to adapt over the training process parameters like
+    learning rate, momentum, etc.
+
+    Parameters
+    ----------
+    parameter : shared variable to be adjusted
+    function : function which input number of iterations and outputs the
+               parameter value
+    """
+    def __init__(self, parameter, function, **kwargs):
+        super(AdjustParameter, self).__init__(**kwargs)
+        self.learning_rate = parameter
+        self.function = function
+        self.num_iterations = 0
+
+    def before_batch(self, batch):
+        self.num_iterations += 1
+        self.learning_rate.set_value(self.function(self.num_iterations))
