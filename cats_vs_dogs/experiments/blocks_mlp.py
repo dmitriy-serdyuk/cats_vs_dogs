@@ -30,7 +30,7 @@ from cats_vs_dogs.bricks import Convolutional, Pooling, ConvNN
 from cats_vs_dogs.algorithms import Adam
 from cats_vs_dogs.schemes import SequentialShuffledScheme
 from cats_vs_dogs.extensions import (DumpWeights, LoadWeights,
-                                     AdjustParameter)
+                                     SharedVariableModifier)
 
 floatX = theano.config.floatX
 logging.basicConfig(level='INFO')
@@ -146,8 +146,9 @@ if __name__ == '__main__':
         clipping = GradientClipping(threshold=numpy.cast[floatX](1000.))
         sgd = SteepestDescent(learning_rate=config.learning_rate)
         step_rule = CompositeRule([clipping, sgd])
-        adjust_learning_rate = AdjustParameter(sgd.learning_rate,
-                                               lambda n: 200. / (20000. + n))
+        adjust_learning_rate = SharedVariableModifier(
+            sgd.learning_rate,
+            lambda n: 200. / (20000. + n))
         extensions += [adjust_learning_rate]
     algorithm = GradientDescent(cost=cost, step_rule=step_rule)
     train_monitor = TrainingDataMonitoring(
