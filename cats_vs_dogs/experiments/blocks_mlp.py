@@ -16,7 +16,7 @@ from blocks.initialization import IsotropicGaussian, Constant
 from blocks.main_loop import MainLoop
 from blocks.monitoring import aggregation
 from blocks.algorithms import (GradientDescent, SteepestDescent, CompositeRule,
-                               GradientClipping)
+                               GradientClipping, RMSProp)
 from blocks.extensions import FinishAfter, Printing
 from blocks.extensions.monitoring import (DataStreamMonitoring,
                                           TrainingDataMonitoring)
@@ -52,7 +52,7 @@ def parse_config(path):
                         default=False)
     config.add_config('model_path', type_=str,
                         default='./models/model')
-    config.add_config('use_adam', type_=bool,
+    config.add_config('algorithm', type_=str,
                         default=False)
     config.add_config('feature_maps', type_=list,
                         default=[25, 50, 100])
@@ -143,8 +143,10 @@ if __name__ == '__main__':
     if config.load:
         extensions += [LoadWeights(config.model_path)]
 
-    if config.use_adam:
+    if config.algorithm == 'adam':
         step_rule = Adam()
+    elif config.algorithm == 'rms_prop':
+        step_rule = RMSProp()
     else:
         clipping = GradientClipping(threshold=numpy.cast[floatX](1000.))
         sgd = SteepestDescent(learning_rate=config.learning_rate)
