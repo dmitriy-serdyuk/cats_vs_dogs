@@ -23,18 +23,17 @@ class ContrastNormalization(Brick):
 
 class ConvNN(Sequence, Initializable, Feedforward):
     def __init__(self, conv_activations, input_dim, filter_sizes,
-                 num_filters, pooling_sizes,
+                 feature_maps, pooling_sizes,
                  top_mlp_activations, top_mlp_dims, conv_step=None, **kwargs):
         if conv_step == None:
             self.conv_step = (1, 1)
         else:
             self.conv_step = conv_step
-        self.conv_activations = conv_activations
         self.input_dim = input_dim
         self.top_mlp_activations = top_mlp_activations
         self.top_mlp_dims = top_mlp_dims
 
-        params = zip(conv_activations, filter_sizes, num_filters,
+        params = zip(conv_activations, filter_sizes, feature_maps,
                      pooling_sizes)
         self.transformations = [
             ConvolutionalLayer(filter_size=filter_size,
@@ -48,7 +47,7 @@ class ConvNN(Sequence, Initializable, Feedforward):
         self.top_mlp = MLP(top_mlp_activations, top_mlp_dims)
         # Interleave the transformations and activations
         application_methods = [brick.apply for brick in list(chain(*zip(
-            self.transformations, conv_activations)))
+            self.transformations)))
             if brick is not None]
         self.flattener = Flattener()
         if len(top_mlp_activations) > 0:
