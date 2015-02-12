@@ -35,19 +35,19 @@ class ConvNN(Sequence, Initializable, Feedforward):
 
         params = zip(conv_activations, filter_sizes, feature_maps,
                      pooling_sizes)
-        self.transformations = [
-            ConvolutionalLayer(filter_size=filter_size,
-                               num_filters=num_filter,
-                               num_channels=None,
-                               pooling_size=pooling_size,
-                               activation=activation,
-                               name='conv_pool_{}'.format(i))
-            for i, (activation, filter_size, num_filter, pooling_size)
-            in enumerate(params)]
+        self.layers = [ConvolutionalLayer(filter_size=filter_size,
+                                          num_filters=num_filter,
+                                          num_channels=None,
+                                          pooling_size=pooling_size,
+                                          activation=activation.apply,
+                                          name='conv_pool_{}'.format(i))
+                       for i, (activation, filter_size, num_filter,
+                               pooling_size)
+                       in enumerate(params)]
         self.top_mlp = MLP(top_mlp_activations, top_mlp_dims)
         # Interleave the transformations and activations
         application_methods = [brick.apply for brick in list(chain(*zip(
-            self.transformations)))
+            self.layers)))
             if brick is not None]
         self.flattener = Flattener()
         if len(top_mlp_activations) > 0:
@@ -64,17 +64,14 @@ class ConvNN(Sequence, Initializable, Feedforward):
         self.top_mlp_dims[-1] = value
 
     def _push_allocation_config(self):
-        if not len(self.conv_dims) == len(self.pooling_dims):
-            raise ValueError('Dimension mismatch')
-        inp_conv_dims = [self.input_dim] + self.conv_dims[:-1]
-        layer_list = zip(inp_conv_dims, self.conv_dims, self.pooling_dims,
-                         self.transformations)
         curr_output_dim = self.input_dim
-        for conv_inp_dim, conv_dim, pool_dim, layer in layer_list:
-            num_channels, _, _ = conv_inp_dim
+        for layer in self.layers:
+            num_channels, _, _ = curr_output_dim
             layer.convolution.num_channels = num_channels
+            layer.convolution.input_dim = curr_output_dim
+            layer.pooling.input_dim = layer.convolution.get_dim('output')
 
-            curr_output_dim = layer.output_dim
+            curr_output_dim = layer.get_dim('output')
 
         self.top_mlp.activations = self.top_mlp_activations
         self.top_mlp.dims = [numpy.prod(curr_output_dim)] + self.top_mlp_dims

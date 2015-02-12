@@ -56,7 +56,7 @@ class Adam(StepRule):
             self.updates[v] = v_t
             param_updates[param] = param_step
         self.updates[self.i] = i_t
-        return param_updates
+        return param_updates, []
 
     def additional_updates(self):
         return self.updates

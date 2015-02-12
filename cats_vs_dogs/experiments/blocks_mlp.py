@@ -90,7 +90,7 @@ if __name__ == '__main__':
     input_dim = (config.channels, config.image_shape, config.image_shape)
     conv_activations = [Rectifier() for _ in config.feature_maps]
     mlp_activations = [Rectifier() for _ in config.mlp_hiddens] + [Softmax()]
-    model = ConvNN([Rectifier(), Rectifier()], input_dim,
+    model = ConvNN(conv_activations, input_dim,
                    filter_sizes=zip(config.conv_sizes, config.conv_sizes),
                    feature_maps=config.feature_maps,
                    pooling_sizes=zip(config.pool_sizes, config.pool_sizes),
