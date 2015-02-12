@@ -8,7 +8,7 @@ import numpy
 import theano
 from theano import tensor
 
-from blocks.bricks import MLP, Tanh, Softmax, Rectifier
+from blocks.bricks import Softmax, Rectifier
 from blocks.bricks.cost import CategoricalCrossEntropy, MisclassificationRate
 from blocks.datasets import DataStream
 from blocks.datasets.schemes import SequentialScheme
@@ -26,7 +26,7 @@ from blocks.config_parser import Configuration
 from ift6266h15.code.pylearn2.datasets.variable_image_dataset import RandomCrop
 
 from cats_vs_dogs.iterators import DogsVsCats
-from cats_vs_dogs.bricks import Convolutional, Pooling, ConvNN
+from cats_vs_dogs.bricks import ConvNN
 from cats_vs_dogs.algorithms import Adam
 from cats_vs_dogs.schemes import SequentialShuffledScheme
 from cats_vs_dogs.extensions import (DumpWeights, LoadWeights,
