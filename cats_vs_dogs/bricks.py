@@ -40,6 +40,7 @@ class ConvNN(Sequence, Initializable, Feedforward):
                                           num_channels=None,
                                           pooling_size=pooling_size,
                                           activation=activation.apply,
+                                          conv_step=self.conv_step,
                                           name='conv_pool_{}'.format(i))
                        for i, (activation, filter_size, num_filter,
                                pooling_size)
@@ -68,7 +69,7 @@ class ConvNN(Sequence, Initializable, Feedforward):
         for layer in self.layers:
             num_channels, _, _ = curr_output_dim
             layer.convolution.num_channels = num_channels
-            layer.convolution.input_dim = curr_output_dim[1:]
+            layer.convolution.image_shape = curr_output_dim[1:]
             layer.pooling.input_dim = layer.convolution.get_dim('output')
 
             curr_output_dim = layer.get_dim('output')
