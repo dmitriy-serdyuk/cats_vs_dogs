@@ -95,15 +95,17 @@ class Dropout(object):
         replacements = {var: var * srng.binomial(var.shape, p=self.prob)
                         for var in input_vars}
         new_graph = self.graph.replace(replacements)
+        out_names = [o.name for o in self.outputs]
         new_outputs = [var for var in new_graph.outputs
-                       if var.name in self.outputs]
+                       if var.name in out_names]
         return new_outputs
 
     def test_model(self):
         weight_vars = VariableFilter(roles=[WEIGHTS])(self.graph)
         replacements = {var: var * self.prob for var in weight_vars}
         new_graph = self.graph.replace(replacements)
+        out_names = [o.name for o in self.outputs]
         new_outputs = [var for var in new_graph.outputs
-                       if var.name in self.outputs]
+                       if var.name in out_names]
         return new_outputs
 
