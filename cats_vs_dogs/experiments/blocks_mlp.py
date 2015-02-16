@@ -26,7 +26,7 @@ from blocks.config_parser import Configuration
 from ift6266h15.code.pylearn2.datasets.variable_image_dataset import RandomCrop
 
 from cats_vs_dogs.iterators import DogsVsCats
-from cats_vs_dogs.bricks import ConvNN
+from cats_vs_dogs.bricks import ConvNN, Dropout
 from cats_vs_dogs.algorithms import Adam
 from cats_vs_dogs.schemes import SequentialShuffledScheme
 from cats_vs_dogs.extensions import (DumpWeights, LoadWeights,
@@ -38,32 +38,20 @@ logging.basicConfig(level='INFO')
 
 def parse_config(path):
     config = ConfigCats()
-    config.add_config('image_shape', type_=int,
-                        default=221)
-    config.add_config('scaled_size', type_=int,
-                        default=256)
-    config.add_config('channels', type_=int,
-                        default=3)
-    config.add_config('batch_size', type_=int,
-                        default=100)
-    config.add_config('epochs', type_=int,
-                        default=50000)
-    config.add_config('load', type_=bool,
-                        default=False)
-    config.add_config('model_path', type_=str,
-                        default='./models/model')
-    config.add_config('algorithm', type_=str,
-                        default=False)
-    config.add_config('feature_maps', type_=list,
-                        default=[25, 50, 100])
-    config.add_config('conv_sizes', type_=list,
-                        default=[7, 5, 3])
-    config.add_config('pool_sizes', type_=list,
-                        default=[3, 3, 3])
-    config.add_config('mlp_hiddens', type_=list,
-                        default=[500])
-    config.add_config('learning_rate', type_=float,
-                        default=1.e-4)
+    config.add_config('image_shape', type_=int, default=221)
+    config.add_config('scaled_size', type_=int, default=256)
+    config.add_config('channels', type_=int, default=3)
+    config.add_config('batch_size', type_=int, default=100)
+    config.add_config('epochs', type_=int, default=50000)
+    config.add_config('load', type_=bool, default=False)
+    config.add_config('model_path', type_=str, default='./models/model')
+    config.add_config('algorithm', type_=str, default=False)
+    config.add_config('feature_maps', type_=list, default=[25, 50, 100])
+    config.add_config('conv_sizes', type_=list, default=[7, 5, 3])
+    config.add_config('pool_sizes', type_=list, default=[3, 3, 3])
+    config.add_config('mlp_hiddens', type_=list, default=[500])
+    config.add_config('learning_rate', type_=float, default=1.e-4)
+    config.add_config('dropout', type_=bool, default=False)
     config.load_yaml(path)
     return config
 
@@ -107,6 +95,14 @@ if __name__ == '__main__':
     cost = CategoricalCrossEntropy().apply(y, y_hat)
     error_rate = MisclassificationRate().apply(tensor.argmax(y, axis=1), y_hat)
 
+    ouputs = [cost, error_rate]
+    train_outputs = ouputs
+    test_outputs = ouputs
+    if config.dropout:
+        dropout = Dropout(0.5, [x, y], ouputs)
+        train_outputs = dropout.train_model()
+        test_outputs = dropout.test_model()
+
     logging.info('.. model built')
     rng = numpy.random.RandomState(2014 + 02 + 04)
     transformer = RandomCrop(config.scaled_size, config.image_shape, rng)
@@ -136,9 +132,9 @@ if __name__ == '__main__':
                                           config.batch_size))
 
     valid_monitor = DataStreamMonitoring(
-        variables=[cost, error_rate], data_stream=valid_stream, prefix="valid")
+        variables=test_outputs, data_stream=valid_stream, prefix="valid")
     test_monitor = DataStreamMonitoring(
-        variables=[cost, error_rate], data_stream=test_stream, prefix="test")
+        variables=test_outputs, data_stream=test_stream, prefix="test")
 
     extensions = []
     if config.load:
@@ -156,9 +152,9 @@ if __name__ == '__main__':
             sgd.learning_rate,
             lambda n: 200. / (20000. + n))
         extensions += [adjust_learning_rate]
-    algorithm = GradientDescent(cost=cost, step_rule=step_rule)
+    algorithm = GradientDescent(cost=train_outputs[0], step_rule=step_rule)
     train_monitor = TrainingDataMonitoring(
-        variables=[cost, error_rate,
+        variables=train_outputs + [
                    aggregation.mean(algorithm.total_gradient_norm)],
         prefix="train", after_every_epoch=True)
     extensions += [FinishAfter(after_n_epochs=config.epochs),

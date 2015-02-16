@@ -5,11 +5,15 @@ from itertools import chain
 import numpy
 
 from theano import tensor
+from theano.tensor.shared_randomstreams import RandomStreams
 
 from blocks.bricks import Sequence, Initializable, Feedforward, Brick
 from blocks.bricks import lazy, MLP
 from blocks.bricks.base import application
 from blocks.bricks.conv import ConvolutionalLayer, Flattener
+from blocks.filter import VariableFilter
+from blocks.roles import INPUT, WEIGHTS
+from blocks.graph import ComputationGraph
 
 
 class ContrastNormalization(Brick):
@@ -76,3 +80,30 @@ class ConvNN(Sequence, Initializable, Feedforward):
 
         self.top_mlp.activations = self.top_mlp_activations
         self.top_mlp.dims = [numpy.prod(curr_output_dim)] + self.top_mlp_dims
+
+
+class Dropout(object):
+    def __init__(self, prob, inputs, outputs):
+        self.graph = ComputationGraph(outputs)
+        self.inputs = inputs
+        self.outputs = outputs
+        self.prob = prob
+
+    def train_model(self):
+        srng = RandomStreams(seed=876)
+        input_vars = VariableFilter(roles=[INPUT])(self.graph)
+        replacements = {var: var * srng.binomial(var.shape, p=self.prob)
+                        for var in input_vars}
+        new_graph = self.graph.replace(replacements)
+        new_outputs = [var for var in new_graph.outputs
+                       if var.name in self.inputs]
+        return new_outputs
+
+    def test_model(self):
+        weight_vars = VariableFilter(roles=[WEIGHTS])(self.graph)
+        replacements = {var: var * self.prob for var in weight_vars}
+        new_graph = self.graph.replace(replacements)
+        new_outputs = [var for var in new_graph.outputs
+                       if var.name in self.inputs]
+        return new_outputs
+
