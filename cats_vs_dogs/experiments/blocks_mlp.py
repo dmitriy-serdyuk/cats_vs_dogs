@@ -99,7 +99,7 @@ if __name__ == '__main__':
     train_outputs = ouputs
     test_outputs = ouputs
     if config.dropout:
-        dropout = Dropout(0.5, [x, y], ouputs)
+        dropout = Dropout(0.5, [x, y], [o.name for o in ouputs])
         train_outputs = dropout.train_model()
         test_outputs = dropout.test_model()
 

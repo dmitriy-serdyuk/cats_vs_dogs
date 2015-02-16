@@ -96,7 +96,7 @@ class Dropout(object):
                         for var in input_vars}
         new_graph = self.graph.replace(replacements)
         new_outputs = [var for var in new_graph.outputs
-                       if var.name in self.inputs]
+                       if var.name in self.outputs]
         return new_outputs
 
     def test_model(self):
@@ -104,6 +104,6 @@ class Dropout(object):
         replacements = {var: var * self.prob for var in weight_vars}
         new_graph = self.graph.replace(replacements)
         new_outputs = [var for var in new_graph.outputs
-                       if var.name in self.inputs]
+                       if var.name in self.outputs]
         return new_outputs
 
