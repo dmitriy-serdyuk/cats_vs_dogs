@@ -10,9 +10,7 @@ from scipy import misc
 
 import theano
 
-from blocks.datasets import Dataset
-from ift6266h15.code.pylearn2.datasets import variable_image_dataset
-from ift6266h15.code.pylearn2.datasets.variable_image_dataset import RandomCrop
+from blocks.datasets import Dataset, DataStream, DataStreamWrapper
 
 from pylearn2.utils.string_utils import preprocess
 from pylearn2.datasets import cache
@@ -103,9 +101,9 @@ class DogsVsCats(Dataset):
         self.flatten = flatten
         if subset == 'train':
             self.start = 0
-            self.stop = 20000
+            self.stop = 200
         elif subset == 'valid':
-            self.start = 20000
+            self.start = 200
             self.stop = 22500
         elif subset == 'test':
             self.start = 22500
@@ -153,3 +151,40 @@ class DogsVsCats(Dataset):
         return X / 256., y
 
 
+class RandomCropStream(DataStreamWrapper):
+    """
+    Crops a square at random on a rescaled version of the image
+
+    Parameters
+    ----------
+    scaled_size : int
+        Size of the smallest side of the image after rescaling
+    crop_size : int
+        Size of the square crop. Must be bigger than scaled_size.
+    rng : int or rng, optional
+        RNG or seed for an RNG
+    """
+    _default_seed = 2015 + 1 + 18
+
+    def __init__(self, scaled_size, crop_size, rng, **kwargs):
+        super(RandomCropStream, self).__init__(**kwargs)
+        self.scaled_size = scaled_size
+        self.crop_size = crop_size
+        if not self.scaled_size > self.crop_size:
+            raise ValueError('Scaled size should be greater than crop size')
+
+    def get_shape(self):
+        return (self.crop_size, self.crop_size)
+
+    def preprocess(self, image):
+        small_axis = np.argmin(image.shape[:-1])
+        ratio = (1.0 * self.scaled_size) / image.shape[small_axis]
+        resized_image = misc.imresize(image, ratio)
+
+        max_i = resized_image.shape[0] - self.crop_size
+        max_j = resized_image.shape[1] - self.crop_size
+        i = self.rng.randint(low=0, high=max_i)
+        j = self.rng.randint(low=0, high=max_j)
+        cropped_image = resized_image[i: i + self.crop_size,
+                        j: j + self.crop_size, :]
+        return cropped_image
