@@ -97,8 +97,7 @@ if __name__ == '__main__':
                    top_mlp_activations=mlp_activations,
                    top_mlp_dims=config.mlp_hiddens + [2],
                    weights_init=IsotropicGaussian(0.1),
-                   biases_init=Constant(0.),
-                   conv_step=(2, 2))
+                   biases_init=Constant(0))
     model.initialize()
 
     x = tensor.tensor4('X')
