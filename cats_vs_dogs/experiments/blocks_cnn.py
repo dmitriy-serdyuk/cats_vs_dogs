@@ -96,7 +96,7 @@ if __name__ == '__main__':
                    pooling_sizes=zip(config.pool_sizes, config.pool_sizes),
                    top_mlp_activations=mlp_activations,
                    top_mlp_dims=config.mlp_hiddens + [2],
-                   border_type='full',
+                   border_mode='full',
                    weights_init=IsotropicGaussian(0.1),
                    biases_init=Constant(0))
     model.initialize()
