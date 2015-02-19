@@ -12,6 +12,7 @@ from blocks.bricks import Softmax, Rectifier
 from blocks.bricks.cost import CategoricalCrossEntropy, MisclassificationRate
 from blocks.datasets import DataStream
 from blocks.datasets.schemes import SequentialScheme
+from blocks.datasets.streams import BatchDataStream
 from blocks.initialization import IsotropicGaussian, Constant
 from blocks.main_loop import MainLoop
 from blocks.monitoring import aggregation
@@ -25,7 +26,8 @@ from blocks.config_parser import Configuration
 
 from ift6266h15.code.pylearn2.datasets.variable_image_dataset import RandomCrop
 
-from cats_vs_dogs.iterators import DogsVsCats
+from cats_vs_dogs.iterators import (DogsVsCats, UnbatchStream,
+                                    RandomCropStream, ReshapeStream)
 from cats_vs_dogs.bricks import ConvNN
 from cats_vs_dogs.algorithms import Adam
 from cats_vs_dogs.schemes import SequentialShuffledScheme
@@ -80,6 +82,23 @@ class ConfigCats(Configuration):
                     self.config[key]['yaml'] = value
 
 
+def construct_stream(dataset, config):
+    stream = DataStream(
+        dataset=dataset,
+        iteration_scheme=SequentialShuffledScheme(dataset.num_examples,
+                                                  config.batch_size, rng))
+    stream = UnbatchStream(data_stream=stream)
+    stream = ReshapeStream(data_stream=stream)
+    stream = RandomCropStream(data_stream=stream,
+                              crop_size=config.image_shape,
+                              scaled_size=config.scaled_size, rng=rng)
+    stream = BatchDataStream(data_stream=stream,
+                             iteration_scheme=SequentialScheme(
+                                 batch_size=config.batch_size,
+                                 num_examples=dataset.num_examples))
+    return stream
+
+
 if __name__ == '__main__':
     logging.info('.. starting')
     parser = argparse.ArgumentParser()
@@ -114,26 +133,17 @@ if __name__ == '__main__':
                                                      'dogs_vs_cats',
                                                      'train.h5'),
                                transformer)
-    train_stream = DataStream(
-        dataset=train_dataset,
-        iteration_scheme=SequentialShuffledScheme(train_dataset.num_examples,
-                                          config.batch_size, rng))
+    train_stream = construct_stream(train_dataset, config)
     test_dataset = DogsVsCats('test', os.path.join('${PYLEARN2_DATA_PATH}',
                                                    'dogs_vs_cats',
                                                    'train.h5'),
                               transformer)
-    test_stream = DataStream(
-        dataset=test_dataset,
-        iteration_scheme=SequentialScheme(train_dataset.num_examples,
-                                          config.batch_size))
+    test_stream = construct_stream(test_dataset, config)
     valid_dataset = DogsVsCats('valid', os.path.join('${PYLEARN2_DATA_PATH}',
                                                      'dogs_vs_cats',
                                                      'train.h5'),
                                transformer)
-    valid_stream = DataStream(
-        dataset=valid_dataset,
-        iteration_scheme=SequentialScheme(train_dataset.num_examples,
-                                          config.batch_size))
+    valid_stream = construct_stream(valid_dataset, config)
 
     valid_monitor = DataStreamMonitoring(
         variables=[cost, error_rate], data_stream=valid_stream, prefix="valid")
