@@ -11,7 +11,8 @@ from scipy import misc
 
 import theano
 
-from blocks.datasets import Dataset, DataStream, DataStreamWrapper
+from blocks.datasets import Dataset
+from blocks.datasets.streams import DataStreamWrapper
 
 from pylearn2.utils.string_utils import preprocess
 from pylearn2.datasets import cache
@@ -101,9 +102,9 @@ class DogsVsCats(Dataset):
         self.flatten = flatten
         if subset == 'train':
             self.start = 0
-            self.stop = 200
+            self.stop = 20000
         elif subset == 'valid':
-            self.start = 200
+            self.start = 20000
             self.stop = 22500
         elif subset == 'test':
             self.start = 22500
