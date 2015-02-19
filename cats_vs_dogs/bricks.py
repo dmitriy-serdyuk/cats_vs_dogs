@@ -71,8 +71,9 @@ class ConvNN(Sequence, Initializable, Feedforward):
         curr_output_dim = self.input_dim
         for layer in self.layers:
             num_channels, _, _ = curr_output_dim
-            layer.convolution.num_channels = num_channels
-            layer.convolution.image_shape = curr_output_dim[1:]
+            layer.num_channels = num_channels
+            layer.image_shape = curr_output_dim[1:]
+            layer._push_allocation_config()
             layer.pooling.input_dim = layer.convolution.get_dim('output')
 
             curr_output_dim = layer.get_dim('output')
