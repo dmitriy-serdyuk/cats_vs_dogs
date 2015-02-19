@@ -15,8 +15,8 @@ from blocks.datasets.schemes import SequentialScheme
 from blocks.initialization import IsotropicGaussian, Constant
 from blocks.main_loop import MainLoop
 from blocks.monitoring import aggregation
-from blocks.algorithms import (GradientDescent, SteepestDescent, CompositeRule,
-                               GradientClipping, RMSProp)
+from blocks.algorithms import (GradientDescent, Scale, CompositeRule,
+                               StepClipping, RMSProp)
 from blocks.extensions import FinishAfter, Printing
 from blocks.extensions.monitoring import (DataStreamMonitoring,
                                           TrainingDataMonitoring)
@@ -149,8 +149,8 @@ if __name__ == '__main__':
     elif config.algorithm == 'rms_prop':
         step_rule = RMSProp(config.learning_rate)
     else:
-        clipping = GradientClipping(threshold=numpy.cast[floatX](1000.))
-        sgd = SteepestDescent(learning_rate=config.learning_rate)
+        clipping = StepClipping(threshold=numpy.cast[floatX](1000.))
+        sgd = Scale(learning_rate=config.learning_rate)
         step_rule = CompositeRule([clipping, sgd])
         adjust_learning_rate = SharedVariableModifier(
             sgd.learning_rate,
@@ -168,6 +168,6 @@ if __name__ == '__main__':
                    Printing(),
                    DumpWeights(config.model_path, after_every_epoch=True,
                                before_first_epoch=True)]
-    main_loop = MainLoop(model, data_stream=train_stream, algorithm=algorithm,
-                         extensions=extensions)
+    main_loop = MainLoop(model=model, data_stream=train_stream,
+                         algorithm=algorithm, extensions=extensions)
     main_loop.run()
