@@ -91,12 +91,11 @@ class BatchIterator(object):
 class DogsVsCats(Dataset):
     provides_sources = ['X', 'y', 'shape']
 
-    def __init__(self, subset, path, transformer, flatten=False):
+    def __init__(self, subset, path, flatten=False):
         self.subset = subset
         self.path = path
         self.data_node = 'Data'
         self.rescale = 256
-        self.transformer = transformer
         self.floatX = theano.config.floatX
         self.n_channels = 3
         self.flatten = flatten
@@ -129,20 +128,16 @@ class DogsVsCats(Dataset):
         indexes = slice(request[0] + self.start, request[-1] + 1 + self.start)
         if indexes.stop > self.stop:
             raise StopIteration
-        X, y, s = self.X, self.y, self.s
-        images = X[indexes]
-        targets = y[indexes]
-        shapes = s[indexes]
-        if self.flatten:
-            X = images.transpose(0, 3, 1, 2).reshape((len(request), -1))
-        else:
-            X = images.transpose(0, 3, 1, 2)
+        X_node, y_node, s_node = self.X, self.y, self.s
+        images = X_node[indexes]
+        targets = y_node[indexes]
+        shapes = s_node[indexes]
         y = np.concatenate((targets, 1 - targets), axis=1)
-        return X / 256. - .5, y, shapes
+        return images, y, shapes
 
 
 class ReshapeStream(DataStreamWrapper):
-    def __init__(self, **kwargs):
+    def __init__(self,  **kwargs):
         super(ReshapeStream, self).__init__(**kwargs)
 
     @property
@@ -153,7 +148,13 @@ class ReshapeStream(DataStreamWrapper):
     def get_data(self, request=None):
         X, y, s = next(self.child_epoch_iterator)
         X = X.reshape(s)
-        return X, y
+        return X / 256. - .5, y
+
+
+class ImageTransposeStream(DataStreamWrapper):
+    def get_data(self, request=None):
+        X, y = next(self.child_epoch_iterator)
+        return X.transpose(0, 3, 1, 2), y
 
 
 class UnbatchStream(DataStreamWrapper):
@@ -163,11 +164,11 @@ class UnbatchStream(DataStreamWrapper):
 
     def get_data(self, request=None):
         if not self.data:
-            X_batch, y_batch = next(self.child_epoch_iterator)
-            self.data = izip(X_batch, y_batch)
+            data = next(self.child_epoch_iterator)
+            self.data = izip(*data)
 
         try:
-            return self.data
+            return next(self.data)
         except StopIteration:
             self.data = None
             return self.get_data()

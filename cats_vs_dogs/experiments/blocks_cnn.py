@@ -11,7 +11,7 @@ from theano import tensor
 from blocks.bricks import Softmax, Rectifier
 from blocks.bricks.cost import CategoricalCrossEntropy, MisclassificationRate
 from blocks.datasets import DataStream
-from blocks.datasets.schemes import SequentialScheme
+from blocks.datasets.schemes import ConstantScheme
 from blocks.datasets.streams import BatchDataStream
 from blocks.initialization import IsotropicGaussian, Constant
 from blocks.main_loop import MainLoop
@@ -24,10 +24,9 @@ from blocks.extensions.monitoring import (DataStreamMonitoring,
 from blocks.extensions.saveload import SerializeMainLoop, LoadFromDump, Dump
 from blocks.config_parser import Configuration
 
-from ift6266h15.code.pylearn2.datasets.variable_image_dataset import RandomCrop
-
 from cats_vs_dogs.iterators import (DogsVsCats, UnbatchStream,
-                                    RandomCropStream, ReshapeStream)
+                                    RandomCropStream, ReshapeStream,
+                                    ImageTransposeStream)
 from cats_vs_dogs.bricks import ConvNN
 from cats_vs_dogs.algorithms import Adam
 from cats_vs_dogs.schemes import SequentialShuffledScheme
@@ -93,9 +92,9 @@ def construct_stream(dataset, config):
                               crop_size=config.image_shape,
                               scaled_size=config.scaled_size, rng=rng)
     stream = BatchDataStream(data_stream=stream,
-                             iteration_scheme=SequentialScheme(
-                                 batch_size=config.batch_size,
-                                 num_examples=dataset.num_examples))
+                             iteration_scheme=ConstantScheme(config.batch_size)
+    )
+    stream = ImageTransposeStream(data_stream=stream)
     return stream
 
 
@@ -128,21 +127,17 @@ if __name__ == '__main__':
 
     logging.info('.. model built')
     rng = numpy.random.RandomState(2014 + 02 + 04)
-    transformer = RandomCrop(config.scaled_size, config.image_shape, rng)
     train_dataset = DogsVsCats('train', os.path.join('${PYLEARN2_DATA_PATH}',
                                                      'dogs_vs_cats',
-                                                     'train.h5'),
-                               transformer)
+                                                     'train.h5'))
     train_stream = construct_stream(train_dataset, config)
     test_dataset = DogsVsCats('test', os.path.join('${PYLEARN2_DATA_PATH}',
                                                    'dogs_vs_cats',
-                                                   'train.h5'),
-                              transformer)
+                                                   'train.h5'))
     test_stream = construct_stream(test_dataset, config)
     valid_dataset = DogsVsCats('valid', os.path.join('${PYLEARN2_DATA_PATH}',
                                                      'dogs_vs_cats',
-                                                     'train.h5'),
-                               transformer)
+                                                     'train.h5'))
     valid_stream = construct_stream(valid_dataset, config)
 
     valid_monitor = DataStreamMonitoring(
@@ -159,7 +154,7 @@ if __name__ == '__main__':
     elif config.algorithm == 'rms_prop':
         step_rule = RMSProp(config.learning_rate)
     else:
-        clipping = StepClipping(threshold=numpy.cast[floatX](1000.))
+        clipping = StepClipping(threshold=numpy.cast[floatX](100.))
         sgd = Scale(learning_rate=config.learning_rate)
         step_rule = CompositeRule([clipping, sgd])
         adjust_learning_rate = SharedVariableModifier(
