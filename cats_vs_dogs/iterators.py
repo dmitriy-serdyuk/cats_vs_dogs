@@ -91,14 +91,10 @@ class BatchIterator(object):
 class DogsVsCats(Dataset):
     provides_sources = ['X', 'y', 'shape']
 
-    def __init__(self, subset, path, flatten=False):
+    def __init__(self, subset, path):
         self.subset = subset
         self.path = path
         self.data_node = 'Data'
-        self.rescale = 256
-        self.floatX = theano.config.floatX
-        self.n_channels = 3
-        self.flatten = flatten
         if subset == 'train':
             self.start = 0
             self.stop = 20000
@@ -116,7 +112,6 @@ class DogsVsCats(Dataset):
         h5file = tables.openFile(self.path, mode="r")
         node = h5file.getNode('/', self.data_node)
 
-        self.rescale = float(self.rescale)
         self.X = getattr(node, 'X')
         self.s = getattr(node, 's')
         self.y = getattr(node, 'y')
