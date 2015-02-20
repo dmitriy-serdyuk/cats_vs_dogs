@@ -22,6 +22,7 @@ from blocks.extensions import FinishAfter, Printing
 from blocks.extensions.monitoring import (DataStreamMonitoring,
                                           TrainingDataMonitoring)
 from blocks.extensions.saveload import SerializeMainLoop, LoadFromDump, Dump
+from blocks.extensions.training import SharedVariableModifier
 from blocks.config_parser import Configuration
 
 from cats_vs_dogs.iterators import (DogsVsCats, UnbatchStream,
@@ -30,8 +31,6 @@ from cats_vs_dogs.iterators import (DogsVsCats, UnbatchStream,
 from cats_vs_dogs.bricks import ConvNN, Dropout
 from cats_vs_dogs.algorithms import Adam
 from cats_vs_dogs.schemes import SequentialShuffledScheme
-from cats_vs_dogs.extensions import (DumpWeights, LoadWeights,
-                                     SharedVariableModifier)
 
 floatX = theano.config.floatX
 logging.basicConfig(level='INFO')
