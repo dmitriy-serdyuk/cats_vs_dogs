@@ -28,7 +28,8 @@ class ContrastNormalization(Brick):
 class ConvNN(Sequence, Initializable, Feedforward):
     def __init__(self, conv_activations, input_dim, filter_sizes,
                  feature_maps, pooling_sizes,
-                 top_mlp_activations, top_mlp_dims, conv_step=None, **kwargs):
+                 top_mlp_activations, top_mlp_dims, conv_step=None,
+                 border_mode='valid', **kwargs):
         if conv_step == None:
             self.conv_step = (1, 1)
         else:
@@ -36,6 +37,7 @@ class ConvNN(Sequence, Initializable, Feedforward):
         self.input_dim = input_dim
         self.top_mlp_activations = top_mlp_activations
         self.top_mlp_dims = top_mlp_dims
+        self.border_mode = border_mode
 
         params = zip(conv_activations, filter_sizes, feature_maps,
                      pooling_sizes)
@@ -45,6 +47,7 @@ class ConvNN(Sequence, Initializable, Feedforward):
                                           pooling_size=pooling_size,
                                           activation=activation.apply,
                                           conv_step=self.conv_step,
+                                          border_mode=self.border_mode,
                                           name='conv_pool_{}'.format(i))
                        for i, (activation, filter_size, num_filter,
                                pooling_size)
@@ -72,8 +75,9 @@ class ConvNN(Sequence, Initializable, Feedforward):
         curr_output_dim = self.input_dim
         for layer in self.layers:
             num_channels, _, _ = curr_output_dim
-            layer.convolution.num_channels = num_channels
-            layer.convolution.image_shape = curr_output_dim[1:]
+            layer.num_channels = num_channels
+            layer.image_shape = curr_output_dim[1:]
+            layer._push_allocation_config()
             layer.pooling.input_dim = layer.convolution.get_dim('output')
 
             curr_output_dim = layer.get_dim('output')

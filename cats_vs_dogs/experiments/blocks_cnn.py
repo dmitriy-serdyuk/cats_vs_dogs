@@ -11,22 +11,23 @@ from theano import tensor
 from blocks.bricks import Softmax, Rectifier
 from blocks.bricks.cost import CategoricalCrossEntropy, MisclassificationRate
 from blocks.datasets import DataStream
-from blocks.datasets.schemes import SequentialScheme
+from blocks.datasets.schemes import ConstantScheme
+from blocks.datasets.streams import BatchDataStream
 from blocks.initialization import IsotropicGaussian, Constant
 from blocks.main_loop import MainLoop
 from blocks.monitoring import aggregation
-from blocks.algorithms import (GradientDescent, SteepestDescent, CompositeRule,
-                               GradientClipping, RMSProp)
+from blocks.algorithms import (GradientDescent, Scale, CompositeRule,
+                               StepClipping, RMSProp)
 from blocks.extensions import FinishAfter, Printing
 from blocks.extensions.monitoring import (DataStreamMonitoring,
                                           TrainingDataMonitoring)
 from blocks.extensions.saveload import SerializeMainLoop, LoadFromDump, Dump
 from blocks.config_parser import Configuration
 
-from ift6266h15.code.pylearn2.datasets.variable_image_dataset import RandomCrop
-
-from cats_vs_dogs.iterators import DogsVsCats
-from cats_vs_dogs.bricks import ConvNN, Dropout
+from cats_vs_dogs.iterators import (DogsVsCats, UnbatchStream,
+                                    RandomCropStream, ReshapeStream,
+                                    ImageTransposeStream)
+from cats_vs_dogs.bricks import ConvNN
 from cats_vs_dogs.algorithms import Adam
 from cats_vs_dogs.schemes import SequentialShuffledScheme
 from cats_vs_dogs.extensions import (DumpWeights, LoadWeights,
@@ -68,6 +69,23 @@ class ConfigCats(Configuration):
                     self.config[key]['yaml'] = value
 
 
+def construct_stream(dataset, config):
+    stream = DataStream(
+        dataset=dataset,
+        iteration_scheme=SequentialShuffledScheme(dataset.num_examples,
+                                                  config.batch_size, rng))
+    stream = UnbatchStream(data_stream=stream)
+    stream = ReshapeStream(data_stream=stream)
+    stream = RandomCropStream(data_stream=stream,
+                              crop_size=config.image_shape,
+                              scaled_size=config.scaled_size, rng=rng)
+    stream = BatchDataStream(data_stream=stream,
+                             iteration_scheme=ConstantScheme(config.batch_size)
+    )
+    stream = ImageTransposeStream(data_stream=stream)
+    return stream
+
+
 if __name__ == '__main__':
     logging.info('.. starting')
     parser = argparse.ArgumentParser()
@@ -84,9 +102,9 @@ if __name__ == '__main__':
                    pooling_sizes=zip(config.pool_sizes, config.pool_sizes),
                    top_mlp_activations=mlp_activations,
                    top_mlp_dims=config.mlp_hiddens + [2],
+                   border_mode='full',
                    weights_init=IsotropicGaussian(0.1),
-                   biases_init=Constant(0.),
-                   conv_step=(2, 2))
+                   biases_init=Constant(0))
     model.initialize()
 
     x = tensor.tensor4('X')
@@ -105,31 +123,18 @@ if __name__ == '__main__':
 
     logging.info('.. model built')
     rng = numpy.random.RandomState(2014 + 02 + 04)
-    transformer = RandomCrop(config.scaled_size, config.image_shape, rng)
     train_dataset = DogsVsCats('train', os.path.join('${PYLEARN2_DATA_PATH}',
                                                      'dogs_vs_cats',
-                                                     'train.h5'),
-                               transformer)
-    train_stream = DataStream(
-        dataset=train_dataset,
-        iteration_scheme=SequentialShuffledScheme(train_dataset.num_examples,
-                                          config.batch_size, rng))
+                                                     'train.h5'))
+    train_stream = construct_stream(train_dataset, config)
     test_dataset = DogsVsCats('test', os.path.join('${PYLEARN2_DATA_PATH}',
                                                    'dogs_vs_cats',
-                                                   'train.h5'),
-                              transformer)
-    test_stream = DataStream(
-        dataset=test_dataset,
-        iteration_scheme=SequentialScheme(train_dataset.num_examples,
-                                          config.batch_size))
+                                                   'train.h5'))
+    test_stream = construct_stream(test_dataset, config)
     valid_dataset = DogsVsCats('valid', os.path.join('${PYLEARN2_DATA_PATH}',
                                                      'dogs_vs_cats',
-                                                     'train.h5'),
-                               transformer)
-    valid_stream = DataStream(
-        dataset=valid_dataset,
-        iteration_scheme=SequentialScheme(train_dataset.num_examples,
-                                          config.batch_size))
+                                                     'train.h5'))
+    valid_stream = construct_stream(valid_dataset, config)
 
     valid_monitor = DataStreamMonitoring(
         variables=test_outputs, data_stream=valid_stream, prefix="valid")
@@ -143,14 +148,14 @@ if __name__ == '__main__':
     if config.algorithm == 'adam':
         step_rule = Adam()
     elif config.algorithm == 'rms_prop':
-        step_rule = RMSProp()
+        step_rule = RMSProp(config.learning_rate)
     else:
-        clipping = GradientClipping(threshold=numpy.cast[floatX](1000.))
-        sgd = SteepestDescent(learning_rate=config.learning_rate)
+        clipping = StepClipping(threshold=numpy.cast[floatX](100.))
+        sgd = Scale(learning_rate=config.learning_rate)
         step_rule = CompositeRule([clipping, sgd])
         adjust_learning_rate = SharedVariableModifier(
             sgd.learning_rate,
-            lambda n: 200. / (20000. + n))
+            lambda n: 10. / (10. / config.learning_rate + n))
         extensions += [adjust_learning_rate]
     algorithm = GradientDescent(cost=train_outputs[0], step_rule=step_rule)
     train_monitor = TrainingDataMonitoring(
@@ -164,6 +169,6 @@ if __name__ == '__main__':
                    Printing(),
                    DumpWeights(config.model_path, after_every_epoch=True,
                                before_first_epoch=True)]
-    main_loop = MainLoop(model, data_stream=train_stream, algorithm=algorithm,
-                         extensions=extensions)
+    main_loop = MainLoop(model=model, data_stream=train_stream,
+                         algorithm=algorithm, extensions=extensions)
     main_loop.run()
