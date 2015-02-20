@@ -27,7 +27,7 @@ from blocks.config_parser import Configuration
 from cats_vs_dogs.iterators import (DogsVsCats, UnbatchStream,
                                     RandomCropStream, ReshapeStream,
                                     ImageTransposeStream)
-from cats_vs_dogs.bricks import ConvNN
+from cats_vs_dogs.bricks import ConvNN, Dropout
 from cats_vs_dogs.algorithms import Adam
 from cats_vs_dogs.schemes import SequentialShuffledScheme
 from cats_vs_dogs.extensions import (DumpWeights, LoadWeights,
