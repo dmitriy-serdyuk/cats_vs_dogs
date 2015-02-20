@@ -144,7 +144,7 @@ if __name__ == '__main__':
 
     extensions = []
     if config.load:
-        extensions += [LoadWeights(config.model_path)]
+        extensions += [LoadFromDump(config.model_path)]
 
     if config.algorithm == 'adam':
         step_rule = Adam()
@@ -168,8 +168,8 @@ if __name__ == '__main__':
                    valid_monitor,
                    test_monitor,
                    Printing(),
-                   DumpWeights(config.model_path, after_every_epoch=True,
-                               before_first_epoch=True)]
+                   Dump(config.model_path, after_every_epoch=True,
+                        before_first_epoch=True)]
     main_loop = MainLoop(model=model, data_stream=train_stream,
                          algorithm=algorithm, extensions=extensions)
     main_loop.run()
