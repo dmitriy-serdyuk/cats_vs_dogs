@@ -2,7 +2,6 @@ __author__ = 'dima'
 
 import os
 import cPickle as pkl
-from itertools import izip
 import tables
 from picklable_itertools import izip
 
@@ -16,6 +15,8 @@ from blocks.datasets.streams import DataStreamWrapper
 
 from pylearn2.utils.string_utils import preprocess
 from pylearn2.datasets import cache
+
+floatX = theano.config.floatX
 
 
 class SingleIterator(object):
@@ -88,22 +89,16 @@ class BatchIterator(object):
         return np.array(images), np.array(labels)
 
 
-class DogsVsCats(Dataset):
-    provides_sources = ['X', 'y', 'shape']
-
-    def __init__(self, subset, path):
-        self.subset = subset
+class Hdf5Dataset(Dataset):
+    def __init__(self, sources, start, stop, path, data_node='Data',
+                 sources_in_file=None):
+        if sources_in_file is None:
+            sources_in_file = sources
+        self.provides_sources = sources
         self.path = path
-        self.data_node = 'Data'
-        if subset == 'train':
-            self.start = 0
-            self.stop = 20000
-        elif subset == 'valid':
-            self.start = 20000
-            self.stop = 22500
-        elif subset == 'test':
-            self.start = 22500
-            self.stop = 25000
+        self.data_node = data_node
+        self.start = start
+        self.stop = stop
         self.num_examples = self.stop - self.start
         # Locally cache the files before reading them
         path = preprocess(self.path)
@@ -112,23 +107,47 @@ class DogsVsCats(Dataset):
         h5file = tables.openFile(self.path, mode="r")
         node = h5file.getNode('/', self.data_node)
 
-        self.X = getattr(node, 'X')
-        self.s = getattr(node, 's')
-        self.y = getattr(node, 'y')
-        super(DogsVsCats, self).__init__(self.provides_sources)
+        self.nodes = [getattr(node, source) for source in sources_in_file]
+        super(Hdf5Dataset, self).__init__(self.provides_sources)
 
     def get_data(self, state=None, request=None):
         if not request:
             raise StopIteration
-        indexes = slice(request[0] + self.start, request[-1] + 1 + self.start)
-        if indexes.stop > self.stop:
-            raise StopIteration
-        X_node, y_node, s_node = self.X, self.y, self.s
-        images = X_node[indexes]
-        targets = y_node[indexes]
-        shapes = s_node[indexes]
-        y = np.concatenate((targets, 1 - targets), axis=1)
-        return images, y, shapes
+        data = [node[request] for node in self.nodes]
+        return data
+
+
+class DogsVsCats(Hdf5Dataset):
+    provides_sources = ['X', 'y', 'shape']
+
+    def __init__(self, subset, path):
+        if subset == 'train':
+            start = 0
+            stop = 20000
+        elif subset == 'valid':
+            start = 20000
+            stop = 22500
+        elif subset == 'test':
+            start = 22500
+            stop = 25000
+        else:
+            raise ValueError('Subset should be train, valid, or test')
+
+        super(DogsVsCats, self).__init__(self.provides_sources, start, stop,
+                                         path, sources_in_file=['X', 'y', 's'])
+
+
+class OneHotEncoderStream(DataStreamWrapper):
+    def __init__(self, num_classes, **kwargs):
+        self.num_classes = num_classes
+        super(OneHotEncoderStream, self).__init__(**kwargs)
+
+    def get_data(self, request=None):
+        X, y, s = next(self.child_epoch_iterator)
+        batch_size = y.shape[0]
+        out_y = np.zeros((batch_size, self.num_classes), dtype='int64')
+        out_y[(xrange(batch_size), y[:, 0])] = 1
+        return X, out_y, s
 
 
 class ReshapeStream(DataStreamWrapper):

@@ -44,7 +44,7 @@ class SequentialShuffledIterator(six.Iterator):
         if self.current >= self.num_examples:
             raise StopIteration
         current_index = self.batch_indexes[self.current_batch]
-        slice_ = range(current_index * self.batch_size,
+        slice_ = slice(current_index * self.batch_size,
                        min(self.num_examples,
                            (current_index + 1) * self.batch_size))
         self.current += self.batch_size
