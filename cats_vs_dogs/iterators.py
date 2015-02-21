@@ -241,4 +241,4 @@ class RandomCropStream(DataStreamWrapper):
         j = self.rng.randint(low=0, high=max_j)
         cropped_image = resized_image[i: i + self.crop_size,
                                       j: j + self.crop_size, :]
-        return cropped_image, y
+        return np.cast[floatX](cropped_image), y
