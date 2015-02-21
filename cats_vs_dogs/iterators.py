@@ -94,6 +94,7 @@ class Hdf5Dataset(Dataset):
                  sources_in_file=None):
         if sources_in_file is None:
             sources_in_file = sources
+        self.sources_in_file = sources_in_file
         self.provides_sources = sources
         self.path = path
         self.data_node = data_node
@@ -107,7 +108,7 @@ class Hdf5Dataset(Dataset):
         h5file = tables.openFile(self.path, mode="r")
         node = h5file.getNode('/', self.data_node)
 
-        self.nodes = [getattr(node, source) for source in sources_in_file]
+        self.nodes = [getattr(node, source) for source in self.sources_in_file]
         super(Hdf5Dataset, self).__init__(self.provides_sources)
 
     def get_data(self, state=None, request=None):
@@ -115,6 +116,17 @@ class Hdf5Dataset(Dataset):
             raise StopIteration
         data = [node[request] for node in self.nodes]
         return data
+
+    def __getstate__(self):
+        dict = self.__dict__
+        return {key: val for key, val in dict.iteritems() if key != 'nodes'}
+
+    def __setstate__(self, state):
+        self.__dict__ = state
+        h5file = tables.openFile(self.path, mode="r")
+        node = h5file.getNode('/', self.data_node)
+
+        self.nodes = [getattr(node, source) for source in self.sources_in_file]
 
 
 class DogsVsCats(Hdf5Dataset):
