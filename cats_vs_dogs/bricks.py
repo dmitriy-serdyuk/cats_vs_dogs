@@ -1,9 +1,10 @@
 __author__ = 'serdyuk'
 
-from itertools import chain
+import re
 
 import numpy
 
+import theano
 from theano import tensor
 from theano.tensor.shared_randomstreams import RandomStreams
 
@@ -15,6 +16,8 @@ from blocks.bricks.conv import (ConvolutionalLayer, Flattener,
 from blocks.filter import VariableFilter
 from blocks.roles import INPUT, WEIGHTS
 from blocks.graph import ComputationGraph
+
+floatX = theano.config.floatX
 
 
 class ContrastNormalization(Brick):
@@ -90,8 +93,9 @@ class Dropout(object):
     def train_model(self):
         srng = RandomStreams(seed=876)
         input_vars = VariableFilter(roles=[INPUT])(self.graph)
-        replacements = {var: var * srng.binomial(var.shape, p=self.prob)
-                        for var in input_vars}
+        replacements = {var: var * srng.binomial(var.shape, p=self.prob,
+                                                 dtype=floatX)
+                        for var in input_vars if re.match('linear', var.name)}
         new_graph = self.graph.replace(replacements)
         out_names = [o.name for o in self.outputs]
         new_outputs = [var for var in new_graph.outputs
