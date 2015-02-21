@@ -8,16 +8,17 @@ import numpy
 import theano
 from theano import tensor
 
+from blocks.algorithms import (GradientDescent, Scale, CompositeRule,
+                               StepClipping, RMSProp)
 from blocks.bricks import Softmax, Rectifier
 from blocks.bricks.cost import CategoricalCrossEntropy, MisclassificationRate
 from blocks.datasets import DataStream
 from blocks.datasets.schemes import ConstantScheme
 from blocks.datasets.streams import BatchDataStream
 from blocks.initialization import IsotropicGaussian, Constant
+from blocks.model import Model
 from blocks.main_loop import MainLoop
 from blocks.monitoring import aggregation
-from blocks.algorithms import (GradientDescent, Scale, CompositeRule,
-                               StepClipping, RMSProp)
 from blocks.extensions import FinishAfter, Printing
 from blocks.extensions.monitoring import (DataStreamMonitoring,
                                           TrainingDataMonitoring)
@@ -93,10 +94,10 @@ if __name__ == '__main__':
     args = parser.parse_args()
     config = parse_config(args.config)
 
-    input_dim = (config.channels, config.image_shape, config.image_shape)
     conv_activations = [Rectifier() for _ in config.feature_maps]
     mlp_activations = [Rectifier() for _ in config.mlp_hiddens] + [Softmax()]
-    model = ConvNN(conv_activations, input_dim,
+    convnet = ConvNN(conv_activations, config.channels,
+                   (config.image_shape,) * 2,
                    filter_sizes=zip(config.conv_sizes, config.conv_sizes),
                    feature_maps=config.feature_maps,
                    pooling_sizes=zip(config.pool_sizes, config.pool_sizes),
@@ -105,11 +106,11 @@ if __name__ == '__main__':
                    border_mode='full',
                    weights_init=IsotropicGaussian(0.1),
                    biases_init=Constant(0))
-    model.initialize()
+    convnet.initialize()
 
     x = tensor.tensor4('X')
     y = tensor.lmatrix('y')
-    y_hat = model.apply(x)
+    y_hat = convnet.apply(x)
     cost = CategoricalCrossEntropy().apply(y, y_hat)
     error_rate = MisclassificationRate().apply(tensor.argmax(y, axis=1), y_hat)
 
@@ -169,6 +170,7 @@ if __name__ == '__main__':
                    Printing(),
                    Dump(config.model_path, after_every_epoch=True,
                         before_first_epoch=True)]
+    model = Model(train_outputs[0])
     main_loop = MainLoop(model=model, data_stream=train_stream,
                          algorithm=algorithm, extensions=extensions)
     main_loop.run()
