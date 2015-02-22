@@ -174,7 +174,7 @@ class ReshapeStream(DataStreamWrapper):
     def get_data(self, request=None):
         X, y, s = next(self.child_epoch_iterator)
         X = X.reshape(s)
-        return X / 256. - .5, y
+        return X, y
 
 
 class ImageTransposeStream(DataStreamWrapper):
@@ -241,4 +241,4 @@ class RandomCropStream(DataStreamWrapper):
         j = self.rng.randint(low=0, high=max_j)
         cropped_image = resized_image[i: i + self.crop_size,
                                       j: j + self.crop_size, :]
-        return np.cast[floatX](cropped_image), y
+        return np.cast[floatX](cropped_image) / 256. - .5, y
