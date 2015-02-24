@@ -22,6 +22,7 @@ from blocks.monitoring import aggregation
 from blocks.extensions import FinishAfter, Printing
 from blocks.extensions.monitoring import (DataStreamMonitoring,
                                           TrainingDataMonitoring)
+from blocks.extensions.plot import Plot
 from blocks.extensions.saveload import SerializeMainLoop, LoadFromDump, Dump
 from blocks.extensions.training import SharedVariableModifier
 from blocks.config_parser import Configuration
@@ -112,7 +113,9 @@ if __name__ == '__main__':
     y = tensor.lmatrix('y')
     y_hat = convnet.apply(x)
     cost = CategoricalCrossEntropy().apply(y, y_hat)
+    cost.name = 'cost'
     error_rate = MisclassificationRate().apply(tensor.argmax(y, axis=1), y_hat)
+    error_rate.name = 'error_rate'
 
     ouputs = [cost, error_rate]
     train_outputs = ouputs
@@ -169,7 +172,15 @@ if __name__ == '__main__':
                    test_monitor,
                    Printing(),
                    Dump(config.model_path, after_every_epoch=True,
-                        before_first_epoch=True)]
+                        before_first_epoch=True),
+                   Plot(os.path.basename(config.model_path),
+                        [[train_monitor.record_name(cost),
+                          train_monitor.record_name(error_rate),
+                          valid_monitor.record_name(cost),
+                          valid_monitor.record_name(error_rate),
+                          test_monitor.record_name(cost),
+                          test_monitor.record_name(error_rate)]],
+                        every_n_batch=20)]
     model = Model(train_outputs[0])
     main_loop = MainLoop(model=model, data_stream=train_stream,
                          algorithm=algorithm, extensions=extensions)
