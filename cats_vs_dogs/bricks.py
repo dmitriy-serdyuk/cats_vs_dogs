@@ -104,7 +104,8 @@ class Dropout(object):
 
     def test_model(self):
         weight_vars = VariableFilter(roles=[WEIGHTS])(self.graph)
-        replacements = {var: var * self.prob for var in weight_vars}
+        replacements = {var: var * self.prob for var in weight_vars
+                        if re.match('linear', var.name)}
         new_graph = self.graph.replace(replacements)
         out_names = [o.name for o in self.outputs]
         new_outputs = [var for var in new_graph.outputs
