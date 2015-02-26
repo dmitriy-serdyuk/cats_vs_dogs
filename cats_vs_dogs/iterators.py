@@ -2,6 +2,7 @@ __author__ = 'dima'
 
 import os
 import cPickle as pkl
+import math
 import tables
 from picklable_itertools import izip
 
@@ -242,3 +243,14 @@ class RandomCropStream(DataStreamWrapper):
         cropped_image = resized_image[i: i + self.crop_size,
                                       j: j + self.crop_size, :]
         return np.cast[floatX](cropped_image) / 256. - .5, y
+
+
+class RandomRotateStream(DataStreamWrapper):
+    def __init__(self, input_size, output_size, rng, **kwargs):
+        self.max_angle = math.acos(output_size / input_size)
+        self.rng = rng
+        super(RandomRotateStream, self).__init__(**kwargs)
+
+    def get_data(self, request=None):
+        X, y = next(self.child_epoch_iterator)
+        sample_angle = self.ng.random_sample() * self.max_angle
