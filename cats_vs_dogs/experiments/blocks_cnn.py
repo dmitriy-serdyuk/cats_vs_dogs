@@ -97,15 +97,14 @@ if __name__ == '__main__':
     config = parse_config(args.config)
 
     conv_activations = [Rectifier() for _ in config.feature_maps]
-    mlp_activations = ([Rectifier() for _ in config.mlp_hiddens] +
-                       [Softmax().categorical_cross_entropy])
+    mlp_activations = [Rectifier() for _ in config.mlp_hiddens]
     convnet = ConvNN(conv_activations, config.channels,
                    (config.image_shape,) * 2,
                    filter_sizes=zip(config.conv_sizes, config.conv_sizes),
                    feature_maps=config.feature_maps,
                    pooling_sizes=zip(config.pool_sizes, config.pool_sizes),
                    top_mlp_activations=mlp_activations,
-                   top_mlp_dims=config.mlp_hiddens + [2],
+                   top_mlp_dims=config.mlp_hiddens,
                    border_mode='full',
                    weights_init=IsotropicGaussian(0.1),
                    biases_init=Constant(0))
@@ -113,10 +112,11 @@ if __name__ == '__main__':
 
     x = tensor.tensor4('X')
     y = tensor.lmatrix('y')
-    y_hat = convnet.apply(x)
-    cost = CategoricalCrossEntropy().apply(y, y_hat)
+    last_hidden = convnet.apply(x)
+    cost = Softmax().categorical_cross_entropy(y, last_hidden)
     cost.name = 'cost'
-    error_rate = MisclassificationRate().apply(tensor.argmax(y, axis=1), y_hat)
+    error_rate = MisclassificationRate().apply(tensor.argmax(y, axis=1),
+                                               last_hidden)
     error_rate.name = 'error_rate'
 
     ouputs = [cost, error_rate]
