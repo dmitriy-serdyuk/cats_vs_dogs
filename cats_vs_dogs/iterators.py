@@ -2,6 +2,7 @@ __author__ = 'dima'
 
 import os
 import cPickle as pkl
+import math
 import tables
 from picklable_itertools import izip
 
@@ -242,3 +243,38 @@ class RandomCropStream(DataStreamWrapper):
         cropped_image = resized_image[i: i + self.crop_size,
                                       j: j + self.crop_size, :]
         return np.cast[floatX](cropped_image) / 256. - .5, y
+
+
+class RandomRotateStream(DataStreamWrapper):
+    """Rotates image.
+
+    Rotates image on a random angle in order to get another one
+    of desired size. The maximum rotation angle is computed to be
+    able to inscribe the output image into the rotated input image.
+
+    Parameters
+    ----------
+    input_size : int
+        The size of a side of a square image.
+    output_size : int
+        Desired output size.
+    rng : :class:`~random.RandomState`
+        Random number generator
+
+    """
+    def __init__(self, input_size, output_size, rng, **kwargs):
+        self.max_angle = math.asin((input_size ** 2 - output_size ** 2) /
+                                   float(input_size * output_size))
+        self.rng = rng
+        self.input_size = input_size
+        self.output_size = output_size
+        super(RandomRotateStream, self).__init__(**kwargs)
+
+    def get_data(self, request=None):
+        X, y = next(self.child_epoch_iterator)
+        sample_angle = (self.ng.random_sample() - 0.5) * 2 * self.max_angle
+        new_image = misc.ndimage.interpolation.rotate(X, sample_angle)
+        start = (self.input_size - self.output_size) / 2.
+        stop = self.output_size - (self.input_size - self.output_size) / 2.
+        reshaped = new_image[start, stop, :]
+        return X, y
