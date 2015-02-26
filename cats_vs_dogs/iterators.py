@@ -277,4 +277,4 @@ class RandomRotateStream(DataStreamWrapper):
         start = (self.input_size - self.output_size) / 2.
         stop = self.output_size - (self.input_size - self.output_size) / 2.
         reshaped = new_image[start, stop, :]
-        return X, y
+        return reshaped, y
