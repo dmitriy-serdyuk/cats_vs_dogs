@@ -97,14 +97,14 @@ if __name__ == '__main__':
     config = parse_config(args.config)
 
     conv_activations = [Rectifier() for _ in config.feature_maps]
-    mlp_activations = [Rectifier() for _ in config.mlp_hiddens]
+    mlp_activations = [Rectifier() for _ in config.mlp_hiddens] + [None]
     convnet = ConvNN(conv_activations, config.channels,
                    (config.image_shape,) * 2,
                    filter_sizes=zip(config.conv_sizes, config.conv_sizes),
                    feature_maps=config.feature_maps,
                    pooling_sizes=zip(config.pool_sizes, config.pool_sizes),
                    top_mlp_activations=mlp_activations,
-                   top_mlp_dims=config.mlp_hiddens,
+                   top_mlp_dims=config.mlp_hiddens + [2],
                    border_mode='full',
                    weights_init=IsotropicGaussian(0.1),
                    biases_init=Constant(0))
