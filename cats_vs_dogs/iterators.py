@@ -2,6 +2,7 @@ __author__ = 'dima'
 
 import os
 import cPickle as pkl
+from collections import OrderedDict, deque
 import math
 import tables
 from picklable_itertools import izip
@@ -12,7 +13,7 @@ from scipy import misc
 import theano
 
 from blocks.datasets import Dataset
-from blocks.datasets.streams import DataStreamWrapper
+from blocks.datasets.streams import DataStreamWrapper, DataStream
 
 from pylearn2.utils.string_utils import preprocess
 from pylearn2.datasets import cache
@@ -278,3 +279,34 @@ class RandomRotateStream(DataStreamWrapper):
         stop = self.output_size - (self.input_size - self.output_size) / 2.
         reshaped = new_image[start, stop, :]
         return reshaped, y
+
+
+class SourceSelectStream(DataStream):
+    def __init__(self, pool, source, **kwargs):
+        self.source = source
+        self.pool = pool
+        self.provides_sources = [source]
+        super(SourceSelectStream, self).__init__(**kwargs)
+
+    def get_data(self, request=None):
+        return self.pool.get_source(self.source)
+
+
+class SelectStreamPool(DataStreamWrapper):
+    def __init__(self, **kwargs):
+        self.pool = OrderedDict()
+        super(SelectStreamPool, self).__init__(**kwargs)
+        for source in self.sources:
+            self.pool[source] = deque()
+
+    def get_streams(self):
+        streams = [SourceSelectStream(self, source) for source in self.sources]
+        return streams
+
+    def get_source(self, source):
+        if not self.pool[source]:
+            source_vals = next(self.child_epoch_iterator)
+            for source, val in zip(self.sources, source_vals):
+                self.pool[source].appendleft(val)
+
+        return self.pool[source].pop()
