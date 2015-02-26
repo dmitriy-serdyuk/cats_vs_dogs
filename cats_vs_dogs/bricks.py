@@ -34,7 +34,7 @@ class ConvNN(Sequence, Initializable, Feedforward):
                  filter_sizes, feature_maps, pooling_sizes,
                  top_mlp_activations, top_mlp_dims, conv_step=None,
                  border_mode='valid', **kwargs):
-        if conv_step == None:
+        if conv_step is None:
             self.conv_step = (1, 1)
         else:
             self.conv_step = conv_step

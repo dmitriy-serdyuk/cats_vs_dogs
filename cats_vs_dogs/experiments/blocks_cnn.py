@@ -95,7 +95,8 @@ if __name__ == '__main__':
     config = parse_config(args.config)
 
     conv_activations = [Rectifier() for _ in config.feature_maps]
-    mlp_activations = [Rectifier() for _ in config.mlp_hiddens] + [Softmax()]
+    mlp_activations = ([Rectifier() for _ in config.mlp_hiddens] +
+                       [Softmax().categorical_cross_entropy])
     convnet = ConvNN(conv_activations, config.channels,
                    (config.image_shape,) * 2,
                    filter_sizes=zip(config.conv_sizes, config.conv_sizes),
