@@ -12,9 +12,6 @@ from blocks.algorithms import (GradientDescent, Scale, CompositeRule,
                                StepClipping, RMSProp)
 from blocks.bricks import Softmax, Rectifier
 from blocks.bricks.cost import CategoricalCrossEntropy, MisclassificationRate
-from blocks.datasets import DataStream
-from blocks.datasets.schemes import ConstantScheme
-from blocks.datasets.streams import BatchDataStream
 from blocks.initialization import IsotropicGaussian, Constant
 from blocks.model import Model
 from blocks.main_loop import MainLoop
@@ -26,6 +23,9 @@ from blocks.extensions.plot import Plot
 from blocks.extensions.saveload import SerializeMainLoop, LoadFromDump, Dump
 from blocks.extensions.training import SharedVariableModifier
 from blocks.config_parser import Configuration
+
+from fuel.streams import DataStream, BatchDataStream
+from fuel.schemes import ConstantScheme
 
 from cats_vs_dogs.iterators import (DogsVsCats, UnbatchStream,
                                     RandomCropStream, ReshapeStream,
@@ -76,6 +76,7 @@ def construct_stream(dataset, config):
         dataset=dataset,
         iteration_scheme=SequentialShuffledScheme(dataset.num_examples,
                                                   config.batch_size, rng))
+
     stream = OneHotEncoderStream(num_classes=2, data_stream=stream)
     stream = UnbatchStream(data_stream=stream)
     stream = ReshapeStream(data_stream=stream)
