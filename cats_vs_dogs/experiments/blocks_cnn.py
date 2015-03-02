@@ -16,7 +16,7 @@ from blocks.initialization import IsotropicGaussian, Constant
 from blocks.model import Model
 from blocks.main_loop import MainLoop
 from blocks.monitoring import aggregation
-from blocks.extensions import FinishAfter, Printing
+from blocks.extensions import FinishAfter, Printing, Timing
 from blocks.extensions.monitoring import (DataStreamMonitoring,
                                           TrainingDataMonitoring)
 from blocks.extensions.plot import Plot
@@ -162,7 +162,7 @@ if __name__ == '__main__':
 
     extensions = []
     if config.load:
-        extensions += [LoadFromDump(config.model_path)]
+        extensions.append(LoadFromDump(config.model_path))
 
     if config.algorithm == 'adam':
         step_rule = Adam()
@@ -175,29 +175,30 @@ if __name__ == '__main__':
         adjust_learning_rate = SharedVariableModifier(
             sgd.learning_rate,
             lambda n: 10. / (10. / config.learning_rate + n))
-        extensions += [adjust_learning_rate]
+        extensions.append(adjust_learning_rate)
     algorithm = GradientDescent(cost=train_outputs[0], step_rule=step_rule)
     train_monitor = TrainingDataMonitoring(
         variables=train_outputs + [
-                   aggregation.mean(algorithm.total_gradient_norm)],
+            aggregation.mean(algorithm.total_gradient_norm)],
         prefix="train", after_every_epoch=True)
-    extensions += [FinishAfter(after_n_epochs=config.epochs),
-                   train_monitor,
-                   valid_monitor,
-                   test_monitor,
-                   Printing(),
-                   Dump(config.model_path, after_every_epoch=True,
-                        before_first_epoch=True)]
+    extensions.extend([FinishAfter(after_n_epochs=config.epochs),
+                       train_monitor,
+                       valid_monitor,
+                       test_monitor,
+                       Printing(),
+                       Dump(config.model_path, after_every_epoch=True,
+                            before_first_epoch=True)])
     if config.plot:
-        extensions += [Plot(os.path.basename(config.model_path),
-                            [[train_monitor.record_name(cost),
-                              train_monitor.record_name(error_rate),
-                              valid_monitor.record_name(cost),
-                              valid_monitor.record_name(error_rate),
-                              test_monitor.record_name(cost),
-                              test_monitor.record_name(error_rate)]],
-                            every_n_batches=20)]
+        extensions.extend([Plot(os.path.basename(config.model_path),
+                                [[train_monitor.record_name(cost),
+                                  train_monitor.record_name(error_rate),
+                                  valid_monitor.record_name(cost),
+                                  valid_monitor.record_name(error_rate),
+                                  test_monitor.record_name(cost),
+                                  test_monitor.record_name(error_rate)]],
+                                every_n_batches=20)])
 
+    extensions.append(Timing())
     model = Model(train_outputs[0])
     main_loop = MainLoop(model=model, data_stream=train_stream,
                          algorithm=algorithm, extensions=extensions)
