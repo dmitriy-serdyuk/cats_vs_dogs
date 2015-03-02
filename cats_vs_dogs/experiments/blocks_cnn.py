@@ -24,8 +24,9 @@ from blocks.extensions.saveload import SerializeMainLoop, LoadFromDump, Dump
 from blocks.extensions.training import SharedVariableModifier
 from blocks.config_parser import Configuration
 
-from fuel.streams import DataStream, BatchDataStream
+from fuel.streams import DataStream
 from fuel.schemes import ConstantScheme
+from fuel.transformers import Batch
 
 from cats_vs_dogs.iterators import (DogsVsCats, UnbatchStream,
                                     RandomCropStream, ReshapeStream,
@@ -87,10 +88,10 @@ def construct_stream(dataset, config):
     x_stream = RandomCropStream(data_stream=x_stream,
                                 crop_size=config.image_shape,
                                 scaled_size=config.scaled_size, rng=rng)
-    x_stream = BatchDataStream(
+    x_stream = Batch(
         data_stream=x_stream,
         iteration_scheme=ConstantScheme(config.batch_size))
-    y_stream = BatchDataStream(
+    y_stream = Batch(
         data_stream=y_stream,
         iteration_scheme=ConstantScheme(config.batch_size))
     y_stream = OneHotEncoderStream(num_classes=2, data_stream=y_stream)

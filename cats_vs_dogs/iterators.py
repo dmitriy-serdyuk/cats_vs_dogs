@@ -1,5 +1,3 @@
-__author__ = 'dima'
-
 import os
 import cPickle as pkl
 from collections import OrderedDict, deque
@@ -13,7 +11,7 @@ from scipy import misc
 import theano
 
 from fuel.datasets import Dataset
-from fuel.streams import DataStreamWrapper, DataStream
+from fuel.transformers import Transformer
 
 from pylearn2.utils.string_utils import preprocess
 from pylearn2.datasets import cache
@@ -151,7 +149,7 @@ class DogsVsCats(Hdf5Dataset):
                                          path, sources_in_file=['X', 'y', 's'])
 
 
-class OneHotEncoderStream(DataStreamWrapper):
+class OneHotEncoderStream(Transformer):
     def __init__(self, num_classes, **kwargs):
         self.num_classes = num_classes
         super(OneHotEncoderStream, self).__init__(**kwargs)
@@ -164,7 +162,7 @@ class OneHotEncoderStream(DataStreamWrapper):
         return out_y,
 
 
-class ReshapeStream(DataStreamWrapper):
+class ReshapeStream(Transformer):
     def __init__(self,  **kwargs):
         super(ReshapeStream, self).__init__(**kwargs)
 
@@ -179,13 +177,13 @@ class ReshapeStream(DataStreamWrapper):
         return X,
 
 
-class ImageTransposeStream(DataStreamWrapper):
+class ImageTransposeStream(Transformer):
     def get_data(self, request=None):
         X, = next(self.child_epoch_iterator)
         return X.transpose(0, 3, 1, 2),
 
 
-class UnbatchStream(DataStreamWrapper):
+class UnbatchStream(Transformer):
     def __init__(self, **kwargs):
         self.data = None
         super(UnbatchStream, self).__init__(**kwargs)
@@ -202,7 +200,7 @@ class UnbatchStream(DataStreamWrapper):
             return self.get_data()
 
 
-class RandomCropStream(DataStreamWrapper):
+class RandomCropStream(Transformer):
     """
     Crops a square at random on a rescaled version of the image
 
@@ -246,7 +244,7 @@ class RandomCropStream(DataStreamWrapper):
         return np.cast[floatX](cropped_image) / 256. - .5,
 
 
-class RandomRotateStream(DataStreamWrapper):
+class RandomRotateStream(Transformer):
     """Rotates image.
 
     Rotates image on a random angle in order to get another one
@@ -281,7 +279,7 @@ class RandomRotateStream(DataStreamWrapper):
         return reshaped,
 
 
-class SourceSelectStream(DataStreamWrapper):
+class SourceSelectStream(Transformer):
     def __init__(self, pool, source, **kwargs):
         self.source = source
         self.pool = pool
@@ -314,11 +312,8 @@ class SelectStreamPool(object):
                 self.pool[name].appendleft(val)
         return self.pool[source].pop(),
 
-    def get_data(self, request=None):
-        return None
 
-
-class MergeStream(DataStreamWrapper):
+class MergeStream(Transformer):
     def __init__(self, streams, **kwargs):
         self.streams = streams
         self.sources = list(chain(*[stream.sources for stream in streams]))
@@ -334,4 +329,4 @@ class MergeStream(DataStreamWrapper):
     def get_epoch_iterator(self, **kwargs):
         self.stream_epoch_iterators = [stream.get_epoch_iterator()
                                        for stream in self.streams]
-        return super(DataStreamWrapper, self).get_epoch_iterator(**kwargs)
+        return super(MergeStream, self).get_epoch_iterator(**kwargs)
