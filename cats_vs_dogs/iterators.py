@@ -5,15 +5,15 @@ import cPickle as pkl
 from collections import OrderedDict, deque
 import math
 import tables
-from picklable_itertools import izip
+from picklable_itertools import izip, chain
 
 import numpy as np
 from scipy import misc
 
 import theano
 
-from blocks.datasets import Dataset
-from blocks.datasets.streams import DataStreamWrapper, DataStream
+from fuel.datasets import Dataset
+from fuel.streams import DataStreamWrapper, DataStream
 
 from pylearn2.utils.string_utils import preprocess
 from pylearn2.datasets import cache
@@ -157,11 +157,11 @@ class OneHotEncoderStream(DataStreamWrapper):
         super(OneHotEncoderStream, self).__init__(**kwargs)
 
     def get_data(self, request=None):
-        X, y, s = next(self.child_epoch_iterator)
+        y, = next(self.child_epoch_iterator)
         batch_size = y.shape[0]
         out_y = np.zeros((batch_size, self.num_classes), dtype='int64')
-        out_y[(xrange(batch_size), y[:, 0])] = 1
-        return X, out_y, s
+        out_y[(xrange(batch_size), y[0])] = 1
+        return out_y,
 
 
 class ReshapeStream(DataStreamWrapper):
@@ -174,15 +174,15 @@ class ReshapeStream(DataStreamWrapper):
                 if source != 'shape']
 
     def get_data(self, request=None):
-        X, y, s = next(self.child_epoch_iterator)
-        X = X.reshape(s)
-        return X, y
+        X, s = next(self.child_epoch_iterator)
+        X = np.array(X).reshape(s)
+        return X,
 
 
 class ImageTransposeStream(DataStreamWrapper):
     def get_data(self, request=None):
-        X, y = next(self.child_epoch_iterator)
-        return X.transpose(0, 3, 1, 2), y
+        X, = next(self.child_epoch_iterator)
+        return X.transpose(0, 3, 1, 2),
 
 
 class UnbatchStream(DataStreamWrapper):
@@ -232,7 +232,7 @@ class RandomCropStream(DataStreamWrapper):
         return (self.crop_size, self.crop_size)
 
     def get_data(self, request=None):
-        X, y = next(self.child_epoch_iterator)
+        X, = next(self.child_epoch_iterator)
         small_axis = np.argmin(X.shape[:-1])
         ratio = (1.0 * self.scaled_size) / X.shape[small_axis]
         resized_image = misc.imresize(X, ratio)
@@ -243,7 +243,7 @@ class RandomCropStream(DataStreamWrapper):
         j = self.rng.randint(low=0, high=max_j)
         cropped_image = resized_image[i: i + self.crop_size,
                                       j: j + self.crop_size, :]
-        return np.cast[floatX](cropped_image) / 256. - .5, y
+        return np.cast[floatX](cropped_image) / 256. - .5,
 
 
 class RandomRotateStream(DataStreamWrapper):
@@ -272,41 +272,66 @@ class RandomRotateStream(DataStreamWrapper):
         super(RandomRotateStream, self).__init__(**kwargs)
 
     def get_data(self, request=None):
-        X, y = next(self.child_epoch_iterator)
+        X, = next(self.child_epoch_iterator)
         sample_angle = (self.ng.random_sample() - 0.5) * 2 * self.max_angle
         new_image = misc.ndimage.interpolation.rotate(X, sample_angle)
         start = (self.input_size - self.output_size) / 2.
         stop = self.output_size - (self.input_size - self.output_size) / 2.
         reshaped = new_image[start, stop, :]
-        return reshaped, y
+        return reshaped,
 
 
-class SourceSelectStream(DataStream):
+class SourceSelectStream(DataStreamWrapper):
     def __init__(self, pool, source, **kwargs):
         self.source = source
         self.pool = pool
         self.provides_sources = [source]
+        self.sources = [source]
         super(SourceSelectStream, self).__init__(**kwargs)
 
     def get_data(self, request=None):
         return self.pool.get_source(self.source)
 
 
-class SelectStreamPool(DataStreamWrapper):
-    def __init__(self, **kwargs):
+class SelectStreamPool(object):
+    def __init__(self, data_stream):
         self.pool = OrderedDict()
-        super(SelectStreamPool, self).__init__(**kwargs)
-        for source in self.sources:
+        self.data_stream = data_stream
+        self.sources = data_stream.sources
+        for source in data_stream.sources:
             self.pool[source] = deque()
 
     def get_streams(self):
-        streams = [SourceSelectStream(self, source) for source in self.sources]
+        streams = [SourceSelectStream(self, source,
+                                      data_stream=self.data_stream)
+                   for source in self.sources]
         return streams
 
     def get_source(self, source):
         if not self.pool[source]:
-            source_vals = next(self.child_epoch_iterator)
-            for source, val in zip(self.sources, source_vals):
-                self.pool[source].appendleft(val)
+            source_vals = self.data_stream.get_data()
+            for name, val in zip(self.sources, source_vals):
+                self.pool[name].appendleft(val)
+        return self.pool[source].pop(),
 
-        return self.pool[source].pop()
+    def get_data(self, request=None):
+        return None
+
+
+class MergeStream(DataStreamWrapper):
+    def __init__(self, streams, **kwargs):
+        self.streams = streams
+        self.sources = list(chain(*[stream.sources for stream in streams]))
+        super(MergeStream, self).__init__(data_stream=streams[0], **kwargs)
+
+    def get_data(self, request=None):
+        next_data = []
+        for iterator in self.stream_epoch_iterators:
+            val = next(iterator)
+            next_data.extend(val)
+        return next_data
+
+    def get_epoch_iterator(self, **kwargs):
+        self.stream_epoch_iterators = [stream.get_epoch_iterator()
+                                       for stream in self.streams]
+        return super(DataStreamWrapper, self).get_epoch_iterator(**kwargs)

@@ -29,7 +29,9 @@ from fuel.schemes import ConstantScheme
 
 from cats_vs_dogs.iterators import (DogsVsCats, UnbatchStream,
                                     RandomCropStream, ReshapeStream,
-                                    ImageTransposeStream, OneHotEncoderStream)
+                                    ImageTransposeStream, OneHotEncoderStream,
+                                    RandomRotateStream, SelectStreamPool,
+                                    MergeStream)
 from cats_vs_dogs.bricks import ConvNN, Dropout
 from cats_vs_dogs.algorithms import Adam
 from cats_vs_dogs.schemes import SequentialShuffledScheme
@@ -76,17 +78,24 @@ def construct_stream(dataset, config):
         dataset=dataset,
         iteration_scheme=SequentialShuffledScheme(dataset.num_examples,
                                                   config.batch_size, rng))
-
-    stream = OneHotEncoderStream(num_classes=2, data_stream=stream)
     stream = UnbatchStream(data_stream=stream)
-    stream = ReshapeStream(data_stream=stream)
-    stream = RandomCropStream(data_stream=stream,
-                              crop_size=config.image_shape,
-                              scaled_size=config.scaled_size, rng=rng)
-    stream = BatchDataStream(data_stream=stream,
-                             iteration_scheme=ConstantScheme(config.batch_size)
-    )
-    stream = ImageTransposeStream(data_stream=stream)
+    pool = SelectStreamPool(data_stream=stream)
+    x_stream, y_stream, s_stream = pool.get_streams()
+
+    xs_stream = MergeStream([x_stream, s_stream])
+    x_stream = ReshapeStream(data_stream=xs_stream)
+    x_stream = RandomCropStream(data_stream=x_stream,
+                                crop_size=config.image_shape,
+                                scaled_size=config.scaled_size, rng=rng)
+    x_stream = BatchDataStream(
+        data_stream=x_stream,
+        iteration_scheme=ConstantScheme(config.batch_size))
+    y_stream = BatchDataStream(
+        data_stream=y_stream,
+        iteration_scheme=ConstantScheme(config.batch_size))
+    y_stream = OneHotEncoderStream(num_classes=2, data_stream=y_stream)
+    x_stream = ImageTransposeStream(data_stream=x_stream)
+    stream = MergeStream([x_stream, y_stream])
     return stream
 
 
@@ -100,16 +109,18 @@ if __name__ == '__main__':
     conv_activations = [Rectifier() for _ in config.feature_maps]
     mlp_activations = [Rectifier() for _ in config.mlp_hiddens] + [None]
     convnet = ConvNN(conv_activations, config.channels,
-                   (config.image_shape,) * 2,
-                   filter_sizes=zip(config.conv_sizes, config.conv_sizes),
-                   feature_maps=config.feature_maps,
-                   pooling_sizes=zip(config.pool_sizes, config.pool_sizes),
-                   top_mlp_activations=mlp_activations,
-                   top_mlp_dims=config.mlp_hiddens + [2],
-                   border_mode='full',
-                   weights_init=IsotropicGaussian(0.1),
-                   biases_init=Constant(0))
+                     (config.image_shape,) * 2,
+                     filter_sizes=zip(config.conv_sizes, config.conv_sizes),
+                     feature_maps=config.feature_maps,
+                     pooling_sizes=zip(config.pool_sizes, config.pool_sizes),
+                     top_mlp_activations=mlp_activations,
+                     top_mlp_dims=config.mlp_hiddens + [2],
+                     border_mode='full',
+                     weights_init=IsotropicGaussian(0.1),
+                     biases_init=Constant(0))
     convnet.initialize()
+    for layer in convnet.layers:
+        logging.info('layer dim: (%d, %d, %d)' % layer.get_dim('input_'))
 
     x = tensor.tensor4('X')
     y = tensor.lmatrix('y')
