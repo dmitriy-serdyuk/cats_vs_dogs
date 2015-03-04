@@ -32,12 +32,8 @@ class ContrastNormalization(Brick):
 class ConvNN(Sequence, Initializable, Feedforward):
     def __init__(self, conv_activations, num_channels, image_shape,
                  filter_sizes, feature_maps, pooling_sizes,
-                 top_mlp_activations, top_mlp_dims, conv_step=None,
+                 top_mlp_activations, top_mlp_dims, conv_step=(1, 1),
                  border_mode='valid', **kwargs):
-        if conv_step is None:
-            self.conv_step = (1, 1)
-        else:
-            self.conv_step = conv_step
         self.num_channels = num_channels
         self.image_shape = image_shape
         self.top_mlp_activations = top_mlp_activations
