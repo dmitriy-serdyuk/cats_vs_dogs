@@ -191,10 +191,10 @@ if __name__ == '__main__':
     if config.plot:
         extensions.extend([Plot(os.path.basename(config.model_path),
                                 [[train_monitor.record_name(cost),
-                                  train_monitor.record_name(error_rate),
                                   valid_monitor.record_name(cost),
+                                  test_monitor.record_name(cost)],
+                                 [train_monitor.record_name(error_rate),
                                   valid_monitor.record_name(error_rate),
-                                  test_monitor.record_name(cost),
                                   test_monitor.record_name(error_rate)]],
                                 every_n_batches=20)])
 
