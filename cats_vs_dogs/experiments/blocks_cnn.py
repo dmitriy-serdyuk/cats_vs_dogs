@@ -12,6 +12,7 @@ from blocks.algorithms import (GradientDescent, Scale, CompositeRule,
                                StepClipping, RMSProp)
 from blocks.bricks import Softmax, Rectifier
 from blocks.bricks.cost import CategoricalCrossEntropy, MisclassificationRate
+from blocks.graph import ComputationGraph
 from blocks.initialization import IsotropicGaussian, Constant
 from blocks.model import Model
 from blocks.main_loop import MainLoop
@@ -20,7 +21,7 @@ from blocks.extensions import FinishAfter, Printing, Timing
 from blocks.extensions.monitoring import (DataStreamMonitoring,
                                           TrainingDataMonitoring)
 from blocks.extensions.plot import Plot
-from blocks.extensions.saveload import SerializeMainLoop, LoadFromDump, Dump
+from blocks.extensions.saveload import LoadFromDump, Dump
 from blocks.extensions.training import SharedVariableModifier
 from blocks.config_parser import Configuration
 
@@ -58,6 +59,7 @@ def parse_config(path):
     config.add_config('learning_rate', type_=float, default=1.e-4)
     config.add_config('dropout', type_=bool, default=False)
     config.add_config('plot', type_=bool, default=False)
+    config.add_config('rotate', type_=bool, default=True)
     config.load_yaml(path)
     return config
 
@@ -74,7 +76,8 @@ class ConfigCats(Configuration):
                     self.config[key]['yaml'] = value
 
 
-def construct_stream(dataset, config):
+def construct_stream(dataset, config, train=False):
+    rng = numpy.random.RandomState(9687)
     stream = DataStream(
         dataset=dataset,
         iteration_scheme=SequentialShuffledScheme(dataset.num_examples,
@@ -85,6 +88,18 @@ def construct_stream(dataset, config):
 
     xs_stream = MergeStream([x_stream, s_stream])
     x_stream = ReshapeStream(data_stream=xs_stream)
+    if config.rotate and train:
+        crop_size = (config.image_shape + config.scaled_size) / 2.
+    else:
+        crop_size = config.image_shape
+    x_stream = RandomCropStream(data_stream=x_stream,
+                                crop_size=crop_size,
+                                scaled_size=config.scaled_size, rng=rng)
+    if config.rotate and train:
+        x_stream = RandomRotateStream(data_stream=x_stream,
+                                      input_size=crop_size,
+                                      output_size=config.image_shape,
+                                      rng=rng)
     x_stream = RandomCropStream(data_stream=x_stream,
                                 crop_size=config.image_shape,
                                 scaled_size=config.scaled_size, rng=rng)
@@ -145,7 +160,7 @@ if __name__ == '__main__':
     train_dataset = DogsVsCats('train', os.path.join('${PYLEARN2_DATA_PATH}',
                                                      'dogs_vs_cats',
                                                      'train.h5'))
-    train_stream = construct_stream(train_dataset, config)
+    train_stream = construct_stream(train_dataset, config, train=True)
     test_dataset = DogsVsCats('test', os.path.join('${PYLEARN2_DATA_PATH}',
                                                    'dogs_vs_cats',
                                                    'train.h5'))
@@ -176,7 +191,9 @@ if __name__ == '__main__':
             sgd.learning_rate,
             lambda n: 10. / (10. / config.learning_rate + n))
         extensions.append(adjust_learning_rate)
-    algorithm = GradientDescent(cost=train_outputs[0], step_rule=step_rule)
+    cg = ComputationGraph(cost)
+    algorithm = GradientDescent(cost=train_outputs[0], step_rule=step_rule,
+                                params=cg.parameters)
     train_monitor = TrainingDataMonitoring(
         variables=train_outputs + [
             aggregation.mean(algorithm.total_gradient_norm)],

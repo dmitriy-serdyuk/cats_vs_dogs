@@ -39,6 +39,7 @@ class ConvNN(Sequence, Initializable, Feedforward):
         self.top_mlp_activations = top_mlp_activations
         self.top_mlp_dims = top_mlp_dims
         self.border_mode = border_mode
+        self.conv_step = conv_step
 
         params = zip(conv_activations, filter_sizes, feature_maps,
                      pooling_sizes)
