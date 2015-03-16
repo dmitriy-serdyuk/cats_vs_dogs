@@ -78,34 +78,3 @@ class ConvNN(Sequence, Initializable, Feedforward):
 
         self.top_mlp.activations = self.top_mlp_activations
         self.top_mlp.dims = [numpy.prod(conv_out_dim)] + self.top_mlp_dims
-
-
-class Dropout(object):
-    def __init__(self, prob, inputs, outputs):
-        self.graph = ComputationGraph(outputs)
-        self.inputs = inputs
-        self.outputs = outputs
-        self.prob = prob
-
-    def train_model(self):
-        srng = RandomStreams(seed=876)
-        input_vars = VariableFilter(roles=[INPUT])(self.graph)
-        replacements = {var: var * srng.binomial(var.shape, p=self.prob,
-                                                 dtype=floatX)
-                        for var in input_vars if re.match('linear', var.name)}
-        new_graph = self.graph.replace(replacements)
-        out_names = [o.name for o in self.outputs]
-        new_outputs = [var for var in new_graph.outputs
-                       if var.name in out_names]
-        return new_outputs
-
-    def test_model(self):
-        weight_vars = VariableFilter(roles=[WEIGHTS])(self.graph)
-        replacements = {var: var * self.prob for var in weight_vars
-                        if re.match('linear', var.name)}
-        new_graph = self.graph.replace(replacements)
-        out_names = [o.name for o in self.outputs]
-        new_outputs = [var for var in new_graph.outputs
-                       if var.name in out_names]
-        return new_outputs
-

@@ -12,18 +12,20 @@ from blocks.algorithms import (GradientDescent, Scale, CompositeRule,
                                StepClipping, RMSProp)
 from blocks.bricks import Softmax, Rectifier
 from blocks.bricks.cost import CategoricalCrossEntropy, MisclassificationRate
-from blocks.graph import ComputationGraph
-from blocks.initialization import IsotropicGaussian, Constant
-from blocks.model import Model
-from blocks.main_loop import MainLoop
-from blocks.monitoring import aggregation
+from blocks.config_parser import Configuration
 from blocks.extensions import FinishAfter, Printing, Timing
 from blocks.extensions.monitoring import (DataStreamMonitoring,
                                           TrainingDataMonitoring)
 from blocks.extensions.plot import Plot
 from blocks.extensions.saveload import LoadFromDump, Dump
 from blocks.extensions.training import SharedVariableModifier
-from blocks.config_parser import Configuration
+from blocks.filter import VariableFilter
+from blocks.graph import ComputationGraph, apply_dropout
+from blocks.initialization import IsotropicGaussian, Constant
+from blocks.model import Model
+from blocks.main_loop import MainLoop
+from blocks.monitoring import aggregation
+from blocks.roles import INPUT
 
 from fuel.streams import DataStream
 from fuel.schemes import ConstantScheme
@@ -150,10 +152,10 @@ if __name__ == '__main__':
     ouputs = [cost, error_rate]
     train_outputs = ouputs
     test_outputs = ouputs
+    cg = ComputationGraph(cost)
     if config.dropout:
-        dropout = Dropout(0.5, [x, y], ouputs)
-        train_outputs = dropout.train_model()
-        test_outputs = dropout.test_model()
+        last_inputs = VariableFilter(bricks=[convnet.top_mlp], roles=[INPUT])
+        cg_dropout = apply_dropout(cg, last_inputs, 0.5)
 
     logging.info('.. model built')
     rng = numpy.random.RandomState(2014 + 02 + 04)
@@ -191,7 +193,6 @@ if __name__ == '__main__':
             sgd.learning_rate,
             lambda n: 10. / (10. / config.learning_rate + n))
         extensions.append(adjust_learning_rate)
-    cg = ComputationGraph(cost)
     algorithm = GradientDescent(cost=train_outputs[0], step_rule=step_rule,
                                 params=cg.parameters)
     train_monitor = TrainingDataMonitoring(
