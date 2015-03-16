@@ -25,7 +25,7 @@ from blocks.initialization import IsotropicGaussian, Constant
 from blocks.model import Model
 from blocks.main_loop import MainLoop
 from blocks.monitoring import aggregation
-from blocks.roles import INPUT
+from blocks.roles import INPUT, WEIGHTS
 
 from fuel.streams import DataStream
 from fuel.schemes import ConstantScheme
@@ -36,7 +36,7 @@ from cats_vs_dogs.iterators import (DogsVsCats, UnbatchStream,
                                     ImageTransposeStream, OneHotEncoderStream,
                                     RandomRotateStream, SelectStreamPool,
                                     MergeStream)
-from cats_vs_dogs.bricks import ConvNN, Dropout
+from cats_vs_dogs.bricks import ConvNN
 from cats_vs_dogs.algorithms import Adam
 from cats_vs_dogs.schemes import SequentialShuffledScheme
 
@@ -62,6 +62,8 @@ def parse_config(path):
     config.add_config('dropout', type_=bool, default=False)
     config.add_config('plot', type_=bool, default=False)
     config.add_config('rotate', type_=bool, default=True)
+    config.add_config('usel2', type_=bool, default=False)
+    config.add_config('l2regularization', type_=float, default=0.01)
     config.load_yaml(path)
     return config
 
@@ -154,8 +156,16 @@ if __name__ == '__main__':
     test_outputs = ouputs
     cg = ComputationGraph(cost)
     if config.dropout:
-        last_inputs = VariableFilter(bricks=[convnet.top_mlp], roles=[INPUT])
+        last_inputs = VariableFilter(bricks=[convnet.top_mlp],
+                                     roles=[INPUT])(cg.variables)
         cg_dropout = apply_dropout(cg, last_inputs, 0.5)
+        train_outputs = cg_dropout.outputs
+    if config.usel2:
+        weights = VariableFilter(roles=[WEIGHTS])(cg.variables)
+        train_outputs[0] = (cost + config.l2regularization *
+                            sum([(weight ** 2).sum() for weight in weights]))
+        test_outputs[0] = (cost + config.l2regularization *
+                           sum([(weight ** 2).sum() for weight in weights]))
 
     logging.info('.. model built')
     rng = numpy.random.RandomState(2014 + 02 + 04)
