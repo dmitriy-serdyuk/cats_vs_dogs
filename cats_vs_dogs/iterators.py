@@ -271,7 +271,7 @@ class RandomRotateStream(Transformer):
 
     def get_data(self, request=None):
         X, = next(self.child_epoch_iterator)
-        sample_angle = (self.ng.random_sample() - 0.5) * 2 * self.max_angle
+        sample_angle = (self.rng.random_sample() - 0.5) * 2 * self.max_angle
         new_image = misc.ndimage.interpolation.rotate(X, sample_angle)
         start = (self.input_size - self.output_size) / 2.
         stop = self.output_size - (self.input_size - self.output_size) / 2.

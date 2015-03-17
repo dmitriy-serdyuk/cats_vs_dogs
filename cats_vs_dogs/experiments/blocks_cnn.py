@@ -192,7 +192,7 @@ if __name__ == '__main__':
         extensions.append(LoadFromDump(config.model_path))
 
     if config.algorithm == 'adam':
-        step_rule = Adam()
+        step_rule = Adam(config.learning_rate)
     elif config.algorithm == 'rms_prop':
         step_rule = RMSProp(config.learning_rate)
     else:
