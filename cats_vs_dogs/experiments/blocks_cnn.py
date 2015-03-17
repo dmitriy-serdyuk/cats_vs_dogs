@@ -13,7 +13,7 @@ from blocks.algorithms import (GradientDescent, Scale, CompositeRule,
 from blocks.bricks import Softmax, Rectifier
 from blocks.bricks.cost import CategoricalCrossEntropy, MisclassificationRate
 from blocks.config_parser import Configuration
-from blocks.extensions import FinishAfter, Printing, Timing
+from blocks.extensions import FinishAfter, Printing, Timing, ProgressBar
 from blocks.extensions.monitoring import (DataStreamMonitoring,
                                           TrainingDataMonitoring)
 from blocks.extensions.plot import Plot
@@ -187,7 +187,7 @@ if __name__ == '__main__':
     test_monitor = DataStreamMonitoring(
         variables=test_outputs, data_stream=test_stream, prefix="test")
 
-    extensions = []
+    extensions = [ProgressBar()]
     if config.load:
         extensions.append(LoadFromDump(config.model_path))
 
