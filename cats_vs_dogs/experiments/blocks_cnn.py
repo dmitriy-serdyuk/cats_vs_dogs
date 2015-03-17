@@ -87,35 +87,35 @@ def construct_stream(dataset, config, train=False):
         iteration_scheme=SequentialShuffledScheme(dataset.num_examples,
                                                   config.batch_size, rng))
     stream = UnbatchStream(data_stream=stream)
-    pool = SelectStreamPool(data_stream=stream)
-    x_stream, y_stream, s_stream = pool.get_streams()
 
-    xs_stream = MergeStream([x_stream, s_stream])
-    x_stream = ReshapeStream(data_stream=xs_stream)
+    stream = ReshapeStream(data_stream=stream, image_source='X',
+                           shape_source='shape')
     if config.rotate and train:
         crop_size = (config.image_shape + config.scaled_size) / 2.
     else:
         crop_size = config.image_shape
-    x_stream = RandomCropStream(data_stream=x_stream,
-                                crop_size=crop_size,
-                                scaled_size=config.scaled_size, rng=rng)
+    stream = RandomCropStream(data_stream=stream,
+                              crop_size=crop_size,
+                              scaled_size=config.scaled_size,
+                              image_source='X',
+                              rng=rng)
     if config.rotate and train:
-        x_stream = RandomRotateStream(data_stream=x_stream,
-                                      input_size=crop_size,
-                                      output_size=config.image_shape,
-                                      rng=rng)
-    x_stream = RandomCropStream(data_stream=x_stream,
-                                crop_size=config.image_shape,
-                                scaled_size=config.scaled_size, rng=rng)
-    x_stream = Batch(
-        data_stream=x_stream,
+        stream = RandomRotateStream(data_stream=stream,
+                                    input_size=crop_size,
+                                    output_size=config.image_shape,
+                                    image_source='X',
+                                    rng=rng)
+    stream = RandomCropStream(data_stream=stream,
+                              crop_size=config.image_shape,
+                              scaled_size=config.scaled_size,
+                              image_source='X',
+                              rng=rng)
+    stream = Batch(
+        data_stream=stream,
         iteration_scheme=ConstantScheme(config.batch_size))
-    y_stream = Batch(
-        data_stream=y_stream,
-        iteration_scheme=ConstantScheme(config.batch_size))
-    y_stream = OneHotEncoderStream(num_classes=2, data_stream=y_stream)
-    x_stream = ImageTransposeStream(data_stream=x_stream)
-    stream = MergeStream([x_stream, y_stream])
+    stream = OneHotEncoderStream(num_classes=2, data_stream=stream,
+                                 target_source='y')
+    stream = ImageTransposeStream(data_stream=stream, image_source='X')
     return stream
 
 

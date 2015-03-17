@@ -6,7 +6,8 @@ import tables
 from picklable_itertools import izip, chain
 
 import numpy as np
-from scipy import misc
+import scipy
+from scipy import misc, ndimage
 
 import theano
 
@@ -150,37 +151,61 @@ class DogsVsCats(Hdf5Dataset):
 
 
 class OneHotEncoderStream(Transformer):
-    def __init__(self, num_classes, **kwargs):
+    def __init__(self, num_classes, target_source, **kwargs):
         self.num_classes = num_classes
+        self.target_source = target_source
         super(OneHotEncoderStream, self).__init__(**kwargs)
 
     def get_data(self, request=None):
-        y, = next(self.child_epoch_iterator)
-        batch_size = y.shape[0]
-        out_y = np.zeros((batch_size, self.num_classes), dtype='int64')
-        out_y[(xrange(batch_size), y[0])] = 1
-        return out_y,
+        data = next(self.child_epoch_iterator)
+        data = OrderedDict(zip(self.data_stream.sources, data))
+        target = data[self.target_source]
+
+        batch_size = target.shape[0]
+        out_target = np.zeros((batch_size, self.num_classes), dtype='int64')
+        out_target[(xrange(batch_size), target[0])] = 1
+
+        data[self.target_source] = out_target
+        return list(data.values())
 
 
 class ReshapeStream(Transformer):
-    def __init__(self,  **kwargs):
+    def __init__(self,  image_source, shape_source, **kwargs):
+        self.image_source = image_source
+        self.shape_source = shape_source
         super(ReshapeStream, self).__init__(**kwargs)
 
     @property
     def sources(self):
         return [source for source in self.data_stream.sources
-                if source != 'shape']
+                if source != self.shape_source]
 
     def get_data(self, request=None):
-        X, s = next(self.child_epoch_iterator)
-        X = np.array(X).reshape(s)
-        return X,
+        data = next(self.child_epoch_iterator)
+        data = OrderedDict(zip(self.data_stream.sources, data))
+        image = data[self.image_source]
+        shape = data[self.shape_source]
+
+        image = np.array(image).reshape(shape)
+
+        data[self.image_source] = image
+        data.pop(self.shape_source)
+        return list(data.values())
 
 
 class ImageTransposeStream(Transformer):
+    def __init__(self, image_source, **kwargs):
+        self.image_source = image_source
+        super(ImageTransposeStream, self).__init__(**kwargs)
+
     def get_data(self, request=None):
-        X, = next(self.child_epoch_iterator)
-        return X.transpose(0, 3, 1, 2),
+        data = next(self.child_epoch_iterator)
+        data = OrderedDict(zip(self.data_stream.sources, data))
+
+        image = data[self.image_source]
+        image = image.transpose(0, 3, 1, 2)
+        data[self.image_source] = image
+        return list(data.values())
 
 
 class UnbatchStream(Transformer):
@@ -215,25 +240,26 @@ class RandomCropStream(Transformer):
     """
     _default_seed = 2015 + 1 + 18
 
-    def __init__(self, scaled_size, crop_size, rng, **kwargs):
-        super(RandomCropStream, self).__init__(**kwargs)
+    def __init__(self, scaled_size, crop_size, image_source, rng, **kwargs):
         self.scaled_size = scaled_size
         self.crop_size = crop_size
+        self.image_source = image_source
         if not self.scaled_size > self.crop_size:
             raise ValueError('Scaled size should be greater than crop size')
         if rng:
             self.rng = rng
         else:
             self.rng = np.RandomState(self._default_seed)
-
-    def get_shape(self):
-        return (self.crop_size, self.crop_size)
+        super(RandomCropStream, self).__init__(**kwargs)
 
     def get_data(self, request=None):
-        X, = next(self.child_epoch_iterator)
-        small_axis = np.argmin(X.shape[:-1])
-        ratio = (1.0 * self.scaled_size) / X.shape[small_axis]
-        resized_image = misc.imresize(X, ratio)
+        data = next(self.child_epoch_iterator)
+        data = OrderedDict(zip(self.data_stream.sources, data))
+        image = data[self.image_source]
+
+        small_axis = np.argmin(image.shape[:-1])
+        ratio = (1.0 * self.scaled_size) / image.shape[small_axis]
+        resized_image = misc.imresize(image, ratio)
 
         max_i = resized_image.shape[0] - self.crop_size
         max_j = resized_image.shape[1] - self.crop_size
@@ -241,7 +267,9 @@ class RandomCropStream(Transformer):
         j = self.rng.randint(low=0, high=max_j)
         cropped_image = resized_image[i: i + self.crop_size,
                                       j: j + self.crop_size, :]
-        return np.cast[floatX](cropped_image) / 256. - .5,
+        image = np.cast[floatX](cropped_image) / 256. - .5
+        data[self.image_source] = image
+        return list(data.values())
 
 
 class RandomRotateStream(Transformer):
@@ -261,22 +289,28 @@ class RandomRotateStream(Transformer):
         Random number generator
 
     """
-    def __init__(self, input_size, output_size, rng, **kwargs):
+    def __init__(self, input_size, output_size, image_source, rng, **kwargs):
         self.max_angle = math.asin((input_size ** 2 - output_size ** 2) /
                                    float(input_size * output_size))
         self.rng = rng
         self.input_size = input_size
         self.output_size = output_size
+        self.image_source = image_source
         super(RandomRotateStream, self).__init__(**kwargs)
 
     def get_data(self, request=None):
-        X, = next(self.child_epoch_iterator)
+        data = next(self.child_epoch_iterator)
+        data = OrderedDict(zip(self.data_stream.sources, data))
+        image = data[self.image_source]
+
         sample_angle = (self.rng.random_sample() - 0.5) * 2 * self.max_angle
-        new_image = misc.ndimage.interpolation.rotate(X, sample_angle)
+        new_image = ndimage.interpolation.rotate(image, sample_angle)
         start = (self.input_size - self.output_size) / 2.
         stop = self.output_size - (self.input_size - self.output_size) / 2.
-        reshaped = new_image[start, stop, :]
-        return reshaped,
+        reshaped = new_image[start: stop, start: stop, :]
+
+        data[self.image_source] = reshaped
+        return list(data.values())
 
 
 class SourceSelectStream(Transformer):
