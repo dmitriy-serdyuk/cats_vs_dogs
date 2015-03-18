@@ -27,15 +27,15 @@ from blocks.main_loop import MainLoop
 from blocks.monitoring import aggregation
 from blocks.roles import INPUT, WEIGHTS
 
+import fuel
 from fuel.streams import DataStream
 from fuel.schemes import ConstantScheme
 from fuel.transformers import Batch
 
 from cats_vs_dogs.iterators import (DogsVsCats, UnbatchStream,
-                                    RandomCropStream, ReshapeStream,
-                                    ImageTransposeStream, OneHotEncoderStream,
-                                    RandomRotateStream, SelectStreamPool,
-                                    MergeStream)
+                                    RandomCrop, Reshape,
+                                    ImageTranspose, OneHotEncoderStream,
+                                    RandomRotate, Normalize)
 from cats_vs_dogs.bricks import ConvNN
 from cats_vs_dogs.algorithms import Adam
 from cats_vs_dogs.schemes import SequentialShuffledScheme
@@ -81,41 +81,43 @@ class ConfigCats(Configuration):
 
 
 def construct_stream(dataset, config, train=False):
-    rng = numpy.random.RandomState(9687)
+    rng = numpy.random.RandomState(9682)
     stream = DataStream(
         dataset=dataset,
         iteration_scheme=SequentialShuffledScheme(dataset.num_examples,
                                                   config.batch_size, rng))
     stream = UnbatchStream(data_stream=stream)
 
-    stream = ReshapeStream(data_stream=stream, image_source='X',
-                           shape_source='shape')
+    stream = Reshape(data_stream=stream, image_source='X',
+                     shape_source='shape')
     if config.rotate and train:
         crop_size = (config.image_shape + config.scaled_size) / 2.
     else:
         crop_size = config.image_shape
-    stream = RandomCropStream(data_stream=stream,
-                              crop_size=crop_size,
-                              scaled_size=config.scaled_size,
-                              image_source='X',
-                              rng=rng)
+    stream = RandomCrop(data_stream=stream,
+                        crop_size=crop_size,
+                        scaled_size=config.scaled_size,
+                        image_source='X',
+                        rng=rng)
     if config.rotate and train:
-        stream = RandomRotateStream(data_stream=stream,
-                                    input_size=crop_size,
-                                    output_size=config.image_shape,
-                                    image_source='X',
-                                    rng=rng)
-    stream = RandomCropStream(data_stream=stream,
-                              crop_size=config.image_shape,
-                              scaled_size=config.scaled_size,
+        stream = RandomRotate(data_stream=stream,
+                              input_size=crop_size,
+                              output_size=config.image_shape,
                               image_source='X',
                               rng=rng)
+    stream = RandomCrop(data_stream=stream,
+                        crop_size=config.image_shape,
+                        scaled_size=config.scaled_size,
+                        image_source='X',
+                        rng=rng)
+    stream = Normalize(data_stream=stream, image_source='X')
     stream = Batch(
         data_stream=stream,
         iteration_scheme=ConstantScheme(config.batch_size))
     stream = OneHotEncoderStream(num_classes=2, data_stream=stream,
                                  target_source='y')
-    stream = ImageTransposeStream(data_stream=stream, image_source='X')
+    stream = ImageTranspose(data_stream=stream, image_source='X')
+
     return stream
 
 
@@ -169,15 +171,15 @@ if __name__ == '__main__':
 
     logging.info('.. model built')
     rng = numpy.random.RandomState(2014 + 02 + 04)
-    train_dataset = DogsVsCats('train', os.path.join('${PYLEARN2_DATA_PATH}',
+    train_dataset = DogsVsCats('train', os.path.join(fuel.config.data_path,
                                                      'dogs_vs_cats',
                                                      'train.h5'))
     train_stream = construct_stream(train_dataset, config, train=True)
-    test_dataset = DogsVsCats('test', os.path.join('${PYLEARN2_DATA_PATH}',
+    test_dataset = DogsVsCats('test', os.path.join(fuel.config.data_path,
                                                    'dogs_vs_cats',
                                                    'train.h5'))
     test_stream = construct_stream(test_dataset, config)
-    valid_dataset = DogsVsCats('valid', os.path.join('${PYLEARN2_DATA_PATH}',
+    valid_dataset = DogsVsCats('valid', os.path.join(fuel.config.data_path,
                                                      'dogs_vs_cats',
                                                      'train.h5'))
     valid_stream = construct_stream(valid_dataset, config)
