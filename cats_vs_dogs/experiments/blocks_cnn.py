@@ -30,7 +30,7 @@ from blocks.roles import INPUT, WEIGHTS
 import fuel
 from fuel.streams import DataStream
 from fuel.schemes import ConstantScheme
-from fuel.transformers import Batch
+from fuel.transformers import Batch, MultiProcessing
 
 from cats_vs_dogs.iterators import (DogsVsCats, UnbatchStream,
                                     RandomCrop, Reshape,
@@ -64,6 +64,7 @@ def parse_config(path):
     config.add_config('rotate', type_=bool, default=True)
     config.add_config('usel2', type_=bool, default=False)
     config.add_config('l2regularization', type_=float, default=0.01)
+    config.add_config('max_store', type_=int, default=5)
     config.load_yaml(path)
     return config
 
@@ -117,6 +118,7 @@ def construct_stream(dataset, config, train=False):
     stream = OneHotEncoderStream(num_classes=2, data_stream=stream,
                                  target_source='y')
     stream = ImageTranspose(data_stream=stream, image_source='X')
+    stream = MultiProcessing(data_stream=stream, max_store=config.max_store)
 
     return stream
 

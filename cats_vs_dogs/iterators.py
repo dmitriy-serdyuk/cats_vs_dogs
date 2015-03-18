@@ -85,6 +85,16 @@ class DataTransformer(Transformer):
 
 
 class OneHotEncoderStream(DataTransformer):
+    """Does one-hot encoding.
+
+    Parameters
+    ----------
+    num_classes : int
+        Total number of classes.
+    target_source : str
+        Target source name.
+
+    """
     def __init__(self, num_classes, target_source, **kwargs):
         self.num_classes = num_classes
         self.target_source = target_source
@@ -101,6 +111,16 @@ class OneHotEncoderStream(DataTransformer):
 
 
 class Reshape(DataTransformer):
+    """Reshapes image.
+
+    Parameters
+    ----------
+    image_source : str
+        Source name where the image is stored.
+    shape_source : str
+        Source name where the image shape is stored.
+
+    """
     def __init__(self,  image_source, shape_source, **kwargs):
         self.image_source = image_source
         self.shape_source = shape_source
@@ -122,6 +142,14 @@ class Reshape(DataTransformer):
 
 
 class ImageTranspose(DataTransformer):
+    """Transposes batch of images.
+
+    Parameters
+    ----------
+    image_sources : str
+        Source name where the image is stored.
+
+    """
     def __init__(self, image_source, **kwargs):
         self.image_source = image_source
         super(ImageTranspose, self).__init__(**kwargs)
@@ -160,6 +188,8 @@ class RandomCrop(DataTransformer):
         Size of the smallest side of the image after rescaling
     crop_size : int
         Size of the square crop. Must be bigger than scaled_size.
+    image_source : str
+        Source name where the image is stored.
     rng : int or rng, optional
         RNG or seed for an RNG
     """
@@ -195,6 +225,14 @@ class RandomCrop(DataTransformer):
 
 
 class Normalize(DataTransformer):
+    """Normalizes image.
+
+    Parameters
+    ----------
+    image_source : str
+        Name of a source where image is stored.
+
+    """
     def __init__(self, image_source, **kwargs):
         self.image_source = image_source
         super(Normalize, self).__init__(**kwargs)
@@ -220,6 +258,8 @@ class RandomRotate(DataTransformer):
         The size of a side of a square image.
     output_size : int
         Desired output size.
+    image_source : str
+        Source name where image is stored.
     rng : :class:`~random.RandomState`
         Random number generator
 
