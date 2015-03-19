@@ -1,5 +1,3 @@
-__author__ = 'serdyuk'
-
 import re
 
 import numpy
@@ -14,7 +12,7 @@ from blocks.bricks.base import application
 from blocks.bricks.conv import (ConvolutionalLayer, Flattener,
                                 ConvolutionalSequence)
 from blocks.filter import VariableFilter
-from blocks.roles import INPUT, WEIGHTS
+from blocks.roles import INPUT, WEIGHT
 from blocks.graph import ComputationGraph
 
 floatX = theano.config.floatX

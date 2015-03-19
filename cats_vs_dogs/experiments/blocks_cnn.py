@@ -25,7 +25,7 @@ from blocks.initialization import IsotropicGaussian, Constant
 from blocks.model import Model
 from blocks.main_loop import MainLoop
 from blocks.monitoring import aggregation
-from blocks.roles import INPUT, WEIGHTS
+from blocks.roles import INPUT, WEIGHT
 
 import fuel
 from fuel.streams import DataStream
@@ -118,17 +118,18 @@ def construct_stream(dataset, config, train=False):
     stream = OneHotEncoderStream(num_classes=2, data_stream=stream,
                                  target_source='y')
     stream = ImageTranspose(data_stream=stream, image_source='X')
-    stream = MultiProcessing(data_stream=stream, max_store=config.max_store)
 
     return stream
 
 
-if __name__ == '__main__':
-    logging.info('.. starting')
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--config', default='config.yml')
-    args = parser.parse_args()
-    config = parse_config(args.config)
+class AttrDict(dict):
+    def __init__(self, *args, **kwargs):
+        super(AttrDict, self).__init__(*args, **kwargs)
+        self.__dict__ = self
+
+
+def main(**kwargs):
+    config = AttrDict(kwargs)
 
     conv_activations = [Rectifier() for _ in config.feature_maps]
     mlp_activations = [Rectifier() for _ in config.mlp_hiddens] + [None]
@@ -165,14 +166,13 @@ if __name__ == '__main__':
         cg_dropout = apply_dropout(cg, last_inputs, 0.5)
         train_outputs = cg_dropout.outputs
     if config.usel2:
-        weights = VariableFilter(roles=[WEIGHTS])(cg.variables)
+        weights = VariableFilter(roles=[WEIGHT])(cg.variables)
         train_outputs[0] = (cost + config.l2regularization *
                             sum([(weight ** 2).sum() for weight in weights]))
         test_outputs[0] = (cost + config.l2regularization *
                            sum([(weight ** 2).sum() for weight in weights]))
 
     logging.info('.. model built')
-    rng = numpy.random.RandomState(2014 + 02 + 04)
     train_dataset = DogsVsCats('train', os.path.join(fuel.config.data_path,
                                                      'dogs_vs_cats',
                                                      'train.h5'))
@@ -212,13 +212,13 @@ if __name__ == '__main__':
     train_monitor = TrainingDataMonitoring(
         variables=train_outputs + [
             aggregation.mean(algorithm.total_gradient_norm)],
-        prefix="train", after_every_epoch=True)
+        prefix="train", after_epoch=True)
     extensions.extend([FinishAfter(after_n_epochs=config.epochs),
                        train_monitor,
                        valid_monitor,
                        test_monitor,
                        Printing(),
-                       Dump(config.model_path, after_every_epoch=True,
+                       Dump(config.model_path, after_epoch=True,
                             before_first_epoch=True)])
     if config.plot:
         extensions.extend([Plot(os.path.basename(config.model_path),
@@ -235,3 +235,13 @@ if __name__ == '__main__':
     main_loop = MainLoop(model=model, data_stream=train_stream,
                          algorithm=algorithm, extensions=extensions)
     main_loop.run()
+
+
+if __name__ == '__main__':
+    logging.info('.. starting')
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--config', default='config.yml')
+    args = parser.parse_args()
+    config = parse_config(args.config)
+
+    main(**{name: getattr(config, name) for name in config.config})
