@@ -146,6 +146,7 @@ def main(**kwargs):
     convnet.initialize()
     for layer in convnet.layers:
         logging.info('layer dim: (%d, %d, %d)' % layer.get_dim('input_'))
+    logging.info('layer dim: (%d, %d, %d)' % layer.get_dim('output'))
 
     x = tensor.tensor4('X')
     y = tensor.lmatrix('y')
