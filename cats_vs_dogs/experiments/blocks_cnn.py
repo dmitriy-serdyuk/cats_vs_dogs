@@ -26,6 +26,7 @@ from blocks.model import Model
 from blocks.main_loop import MainLoop
 from blocks.monitoring import aggregation
 from blocks.roles import INPUT, WEIGHT
+from blocks.select import Selector
 
 import fuel
 from fuel.streams import DataStream
@@ -65,6 +66,7 @@ def parse_config(path):
     config.add_config('usel2', type_=bool, default=False)
     config.add_config('l2regularization', type_=float, default=0.01)
     config.add_config('max_store', type_=int, default=5)
+    config.add_config('do_not_train_conv', type_=bool, default=False)
     config.load_yaml(path)
     return config
 
@@ -208,6 +210,8 @@ def main(**kwargs):
             sgd.learning_rate,
             lambda n: 10. / (10. / config.learning_rate + n))
         extensions.append(adjust_learning_rate)
+    if config.do_not_train_conv:
+        parameters = Selector([convnet.top_mlp]).get_params()
     algorithm = GradientDescent(cost=train_outputs[0], step_rule=step_rule,
                                 params=cg.parameters)
     train_monitor = TrainingDataMonitoring(
