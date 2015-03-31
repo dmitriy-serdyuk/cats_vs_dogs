@@ -12,8 +12,8 @@ from scipy import misc
 
 import theano
 
-from blocks.datasets import Dataset
-from blocks.datasets.streams import DataStreamWrapper, DataStream
+from fuel.datasets import Dataset
+from fuel.streams import DataStreamWrapper, DataStream
 
 from pylearn2.utils.string_utils import preprocess
 from pylearn2.datasets import cache

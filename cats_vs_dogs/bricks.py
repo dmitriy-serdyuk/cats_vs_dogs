@@ -14,7 +14,7 @@ from blocks.bricks.base import application
 from blocks.bricks.conv import (ConvolutionalLayer, Flattener,
                                 ConvolutionalSequence)
 from blocks.filter import VariableFilter
-from blocks.roles import INPUT, WEIGHTS
+from blocks.roles import INPUT, WEIGHT
 from blocks.graph import ComputationGraph
 
 floatX = theano.config.floatX
@@ -103,7 +103,7 @@ class Dropout(object):
         return new_outputs
 
     def test_model(self):
-        weight_vars = VariableFilter(roles=[WEIGHTS])(self.graph)
+        weight_vars = VariableFilter(roles=[WEIGHT])(self.graph)
         replacements = {var: var * self.prob for var in weight_vars
                         if re.match('linear', var.name)}
         new_graph = self.graph.replace(replacements)
