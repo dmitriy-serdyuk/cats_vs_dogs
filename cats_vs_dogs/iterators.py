@@ -13,7 +13,7 @@ from scipy import misc
 import theano
 
 from fuel.datasets import Dataset
-from fuel.streams import DataStreamWrapper, DataStream
+from fuel.transformers import Transformer
 
 from pylearn2.utils.string_utils import preprocess
 from pylearn2.datasets import cache
@@ -151,7 +151,7 @@ class DogsVsCats(Hdf5Dataset):
                                          path, sources_in_file=['X', 'y', 's'])
 
 
-class OneHotEncoder(DataStreamWrapper):
+class OneHotEncoder(Transformer):
     def __init__(self, num_classes, **kwargs):
         self.num_classes = num_classes
         super(OneHotEncoder, self).__init__(**kwargs)
@@ -164,7 +164,7 @@ class OneHotEncoder(DataStreamWrapper):
         return X, out_y, s
 
 
-class Reshape(DataStreamWrapper):
+class Reshape(Transformer):
     def __init__(self,  **kwargs):
         super(Reshape, self).__init__(**kwargs)
 
@@ -179,13 +179,13 @@ class Reshape(DataStreamWrapper):
         return X, y
 
 
-class ImageTranspose(DataStreamWrapper):
+class ImageTranspose(Transformer):
     def get_data(self, request=None):
         X, y = next(self.child_epoch_iterator)
         return X.transpose(0, 3, 1, 2), y
 
 
-class Unbatch(DataStreamWrapper):
+class Unbatch(Transformer):
     def __init__(self, **kwargs):
         self.data = None
         super(Unbatch, self).__init__(**kwargs)
@@ -202,7 +202,7 @@ class Unbatch(DataStreamWrapper):
             return self.get_data()
 
 
-class RandomCrop(DataStreamWrapper):
+class RandomCrop(Transformer):
     """
     Crops a square at random on a rescaled version of the image
 
@@ -246,7 +246,7 @@ class RandomCrop(DataStreamWrapper):
         return np.cast[floatX](cropped_image) / 256. - .5, y
 
 
-class RandomRotate(DataStreamWrapper):
+class RandomRotate(Transformer):
     """Rotates image.
 
     Rotates image on a random angle in order to get another one
