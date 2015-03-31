@@ -16,7 +16,7 @@ from blocks.initialization import IsotropicGaussian, Constant
 from blocks.model import Model
 from blocks.main_loop import MainLoop
 from blocks.monitoring import aggregation
-from blocks.extensions import FinishAfter, Printing
+from blocks.extensions import FinishAfter, Printing, ProgressBar
 from blocks.extensions.monitoring import (DataStreamMonitoring,
                                           TrainingDataMonitoring)
 from blocks.extensions.plot import Plot
@@ -174,6 +174,7 @@ if __name__ == '__main__':
                    train_monitor,
                    valid_monitor,
                    test_monitor,
+                   ProgressBar(),
                    Printing(),
                    Dump(config.model_path, after_epoch=True,
                         before_first_epoch=True)]
