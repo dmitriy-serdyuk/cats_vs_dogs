@@ -151,10 +151,10 @@ class DogsVsCats(Hdf5Dataset):
                                          path, sources_in_file=['X', 'y', 's'])
 
 
-class OneHotEncoderStream(DataStreamWrapper):
+class OneHotEncoder(DataStreamWrapper):
     def __init__(self, num_classes, **kwargs):
         self.num_classes = num_classes
-        super(OneHotEncoderStream, self).__init__(**kwargs)
+        super(OneHotEncoder, self).__init__(**kwargs)
 
     def get_data(self, request=None):
         X, y, s = next(self.child_epoch_iterator)
@@ -164,9 +164,9 @@ class OneHotEncoderStream(DataStreamWrapper):
         return X, out_y, s
 
 
-class ReshapeStream(DataStreamWrapper):
+class Reshape(DataStreamWrapper):
     def __init__(self,  **kwargs):
-        super(ReshapeStream, self).__init__(**kwargs)
+        super(Reshape, self).__init__(**kwargs)
 
     @property
     def sources(self):
@@ -179,16 +179,16 @@ class ReshapeStream(DataStreamWrapper):
         return X, y
 
 
-class ImageTransposeStream(DataStreamWrapper):
+class ImageTranspose(DataStreamWrapper):
     def get_data(self, request=None):
         X, y = next(self.child_epoch_iterator)
         return X.transpose(0, 3, 1, 2), y
 
 
-class UnbatchStream(DataStreamWrapper):
+class Unbatch(DataStreamWrapper):
     def __init__(self, **kwargs):
         self.data = None
-        super(UnbatchStream, self).__init__(**kwargs)
+        super(Unbatch, self).__init__(**kwargs)
 
     def get_data(self, request=None):
         if not self.data:
@@ -202,7 +202,7 @@ class UnbatchStream(DataStreamWrapper):
             return self.get_data()
 
 
-class RandomCropStream(DataStreamWrapper):
+class RandomCrop(DataStreamWrapper):
     """
     Crops a square at random on a rescaled version of the image
 
@@ -218,7 +218,7 @@ class RandomCropStream(DataStreamWrapper):
     _default_seed = 2015 + 1 + 18
 
     def __init__(self, scaled_size, crop_size, rng, **kwargs):
-        super(RandomCropStream, self).__init__(**kwargs)
+        super(RandomCrop, self).__init__(**kwargs)
         self.scaled_size = scaled_size
         self.crop_size = crop_size
         if not self.scaled_size > self.crop_size:
@@ -246,7 +246,7 @@ class RandomCropStream(DataStreamWrapper):
         return np.cast[floatX](cropped_image) / 256. - .5, y
 
 
-class RandomRotateStream(DataStreamWrapper):
+class RandomRotate(DataStreamWrapper):
     """Rotates image.
 
     Rotates image on a random angle in order to get another one
@@ -269,7 +269,7 @@ class RandomRotateStream(DataStreamWrapper):
         self.rng = rng
         self.input_size = input_size
         self.output_size = output_size
-        super(RandomRotateStream, self).__init__(**kwargs)
+        super(RandomRotate, self).__init__(**kwargs)
 
     def get_data(self, request=None):
         X, y = next(self.child_epoch_iterator)
@@ -279,34 +279,3 @@ class RandomRotateStream(DataStreamWrapper):
         stop = self.output_size - (self.input_size - self.output_size) / 2.
         reshaped = new_image[start, stop, :]
         return reshaped, y
-
-
-class SourceSelectStream(DataStream):
-    def __init__(self, pool, source, **kwargs):
-        self.source = source
-        self.pool = pool
-        self.provides_sources = [source]
-        super(SourceSelectStream, self).__init__(**kwargs)
-
-    def get_data(self, request=None):
-        return self.pool.get_source(self.source)
-
-
-class SelectStreamPool(DataStreamWrapper):
-    def __init__(self, **kwargs):
-        self.pool = OrderedDict()
-        super(SelectStreamPool, self).__init__(**kwargs)
-        for source in self.sources:
-            self.pool[source] = deque()
-
-    def get_streams(self):
-        streams = [SourceSelectStream(self, source) for source in self.sources]
-        return streams
-
-    def get_source(self, source):
-        if not self.pool[source]:
-            source_vals = next(self.child_epoch_iterator)
-            for source, val in zip(self.sources, source_vals):
-                self.pool[source].appendleft(val)
-
-        return self.pool[source].pop()

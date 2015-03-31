@@ -27,9 +27,9 @@ from blocks.config_parser import Configuration
 from fuel.schemes import ConstantScheme
 from fuel.streams import BatchDataStream, DataStream
 
-from cats_vs_dogs.iterators import (DogsVsCats, UnbatchStream,
-                                    RandomCropStream, ReshapeStream,
-                                    ImageTransposeStream, OneHotEncoderStream)
+from cats_vs_dogs.iterators import (DogsVsCats, Unbatch,
+                                    RandomCrop, Reshape,
+                                    ImageTranspose, OneHotEncoder)
 from cats_vs_dogs.bricks import ConvNN, Dropout
 from cats_vs_dogs.algorithms import Adam
 from cats_vs_dogs.schemes import SequentialShuffledScheme
@@ -76,16 +76,16 @@ def construct_stream(dataset, config):
         dataset=dataset,
         iteration_scheme=SequentialShuffledScheme(dataset.num_examples,
                                                   config.batch_size, rng))
-    stream = OneHotEncoderStream(num_classes=2, data_stream=stream)
-    stream = UnbatchStream(data_stream=stream)
-    stream = ReshapeStream(data_stream=stream)
-    stream = RandomCropStream(data_stream=stream,
+    stream = OneHotEncoder(num_classes=2, data_stream=stream)
+    stream = Unbatch(data_stream=stream)
+    stream = Reshape(data_stream=stream)
+    stream = RandomCrop(data_stream=stream,
                               crop_size=config.image_shape,
                               scaled_size=config.scaled_size, rng=rng)
     stream = BatchDataStream(data_stream=stream,
                              iteration_scheme=ConstantScheme(config.batch_size)
     )
-    stream = ImageTransposeStream(data_stream=stream)
+    stream = ImageTranspose(data_stream=stream)
     return stream
 
 
