@@ -2,6 +2,7 @@ import logging
 import os
 import argparse
 import yaml
+import cPickle
 
 import numpy
 
@@ -20,11 +21,13 @@ from blocks.extensions import FinishAfter, Printing, ProgressBar
 from blocks.extensions.monitoring import (DataStreamMonitoring,
                                           TrainingDataMonitoring)
 from blocks.extensions.plot import Plot
-from blocks.extensions.saveload import LoadFromDump, Dump
+from blocks.extensions.saveload import Dump
 from blocks.extensions.training import SharedVariableModifier
+from blocks.dump import load_parameter_values
 from blocks.config_parser import Configuration
 
-from fuel.schemes import ConstantScheme
+from fuel.datasets import IterableDataset
+from fuel.schemes import ConstantScheme, SequentialScheme
 from fuel.streams import BatchDataStream, DataStream
 
 from cats_vs_dogs.iterators import (DogsVsCats, Unbatch,
@@ -36,6 +39,14 @@ from cats_vs_dogs.schemes import SequentialShuffledScheme
 
 floatX = theano.config.floatX
 logging.basicConfig(level='INFO')
+
+
+def load_params(path, model):
+    parameters = load_parameter_values(path + '/params.npz')
+    with open(path + '/log', "rb") as source:
+        log = cPickle.load(source)
+    model.set_param_values(parameters)
+    #main_loop.log = log
 
 
 def parse_config(path):
@@ -55,6 +66,7 @@ def parse_config(path):
     config.add_config('learning_rate', type_=float, default=1.e-4)
     config.add_config('dropout', type_=bool, default=False)
     config.add_config('plot', type_=bool, default=False)
+    config.add_config('test', type_=bool, default=False)
     config.load_yaml(path)
     return config
 
@@ -71,21 +83,29 @@ class ConfigCats(Configuration):
                     self.config[key]['yaml'] = value
 
 
-def construct_stream(dataset, config):
+def construct_stream(dataset, config, test=False):
+    if test:
+        scheme = None
+    else:
+        scheme = SequentialShuffledScheme(dataset.num_examples,
+                                          config.batch_size, rng)
     stream = DataStream(
         dataset=dataset,
-        iteration_scheme=SequentialShuffledScheme(dataset.num_examples,
-                                                  config.batch_size, rng))
-    stream = OneHotEncoder(num_classes=2, data_stream=stream)
-    stream = Unbatch(data_stream=stream)
-    stream = Reshape(data_stream=stream)
-    stream = RandomCrop(data_stream=stream,
-                              crop_size=config.image_shape,
-                              scaled_size=config.scaled_size, rng=rng)
-    stream = BatchDataStream(data_stream=stream,
-                             iteration_scheme=ConstantScheme(config.batch_size)
-    )
-    stream = ImageTranspose(data_stream=stream)
+        iteration_scheme=scheme)
+    if not test:
+        stream = OneHotEncoder(num_classes=2, data_stream=stream)
+        stream = Unbatch(data_stream=stream)
+    if not test:
+        stream = Reshape(stream, 'X', 'shape')
+    stream = RandomCrop(data_stream=stream, image_source='X',
+                        crop_size=config.image_shape,
+                        scaled_size=config.scaled_size, rng=rng)
+    if test:
+        batch_scheme = ConstantScheme(1)
+    else:
+        batch_scheme = ConstantScheme(config.batch_size)
+    stream = BatchDataStream(data_stream=stream, iteration_scheme=batch_scheme)
+    stream = ImageTranspose(stream, 'X')
     return stream
 
 
@@ -133,14 +153,35 @@ if __name__ == '__main__':
                                                      'dogs_vs_cats',
                                                      'train.h5'))
     train_stream = construct_stream(train_dataset, config)
+    from matplotlib import pyplot as plt
+    #print 'start iter'
+    #for data in train_stream.get_epoch_iterator():
+    #    print 'start show'
+    #    print data[0][0].shape
+    #    plt.imshow(numpy.cast['uint8'](data[0][0].transpose(1, 2, 0) * 65. + 114.))
+    #    plt.show()
+    #    print 'end show'
+    #    break
+
     test_dataset = DogsVsCats('test', os.path.join('${PYLEARN2_DATA_PATH}',
                                                    'dogs_vs_cats',
                                                    'train.h5'))
     test_stream = construct_stream(test_dataset, config)
+    #for data in test_stream.get_epoch_iterator():
+    #    plt.imshow(numpy.cast['uint8'](data[0][0].transpose(1, 2, 0) * 65. + 114.))
+    #    plt.show()
+    #    break
+
+    #for i, data in enumerate(test_stream.get_epoch_iterator()):
+    #    pass
+    #print i
     valid_dataset = DogsVsCats('valid', os.path.join('${PYLEARN2_DATA_PATH}',
                                                      'dogs_vs_cats',
                                                      'train.h5'))
     valid_stream = construct_stream(valid_dataset, config)
+    #for i, data in enumerate(valid_stream.get_epoch_iterator()):
+    #    pass
+    #print i
 
     valid_monitor = DataStreamMonitoring(
         variables=test_outputs, data_stream=valid_stream, prefix="valid")
@@ -148,8 +189,6 @@ if __name__ == '__main__':
         variables=test_outputs, data_stream=test_stream, prefix="test")
 
     extensions = []
-    if config.load:
-        extensions += [LoadFromDump(config.model_path)]
 
     if config.algorithm == 'adam':
         step_rule = Adam()
@@ -176,8 +215,9 @@ if __name__ == '__main__':
                    test_monitor,
                    ProgressBar(),
                    Printing(),
-                   Dump(config.model_path, after_epoch=True,
-                        before_first_epoch=True)]
+                   Dump(config.model_path, after_epoch=True)]
+    print train_monitor.record_name(cost)
+    print valid_monitor.record_name(cost)
     if config.plot:
         extensions += [Plot(os.path.basename(config.model_path),
                             [[train_monitor.record_name(cost),
@@ -187,6 +227,25 @@ if __name__ == '__main__':
                               valid_monitor.record_name(error_rate),
                               test_monitor.record_name(error_rate)]],
                             every_n_batches=20)]
+    if config.load:
+        load_params(config.model_path, model)
+    if config.test:
+        from scipy import misc
+        path = '/data/lisatmp3/serdyuk/catsvsdogs/test1/'
+        predict = theano.function([x], [last_hidden, Softmax().apply(last_hidden)])
+        for filename in os.listdir(path):
+            if not os.path.isfile(path + '/' + filename):
+                continue
+            image = misc.imread(path + '/' + filename)
+            dataset = IterableDataset({'X': [image, image, image, image, image]})
+            stream = construct_stream(dataset, config, test=True)
+
+            preds = []
+            for data in stream.get_epoch_iterator():
+                pred = predict(data[0])
+                preds.append(pred[0].argmax())
+            print '%s, %d' % (filename[:-4], 1 if sum(preds) > 2 else 0)
+        assert False
 
     main_loop = MainLoop(model=model, data_stream=train_stream,
                          algorithm=algorithm, extensions=extensions)
