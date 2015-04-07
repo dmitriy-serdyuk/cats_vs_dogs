@@ -3,6 +3,8 @@ import os
 import argparse
 import yaml
 import cPickle
+import re
+from collections import OrderedDict
 
 import numpy
 
@@ -203,8 +205,12 @@ if __name__ == '__main__':
             lambda n: 10. / (10. / config.learning_rate + n))
         extensions += [adjust_learning_rate]
     model = Model(train_outputs[0])
+    learn_params = OrderedDict([(name, param) for name, param in model.get_params().items()
+                                if not re.match('.*conv_pool_[0-2].*', name)
+                                ])
+    print 'learn_parameters', learn_params
     algorithm = GradientDescent(cost=train_outputs[0], step_rule=step_rule,
-                                params=model.parameters)
+                                params=learn_params.values())
     train_monitor = TrainingDataMonitoring(
         variables=train_outputs + [
                    aggregation.mean(algorithm.total_gradient_norm)],
@@ -225,8 +231,7 @@ if __name__ == '__main__':
                               test_monitor.record_name(cost)],
                              [train_monitor.record_name(error_rate),
                               valid_monitor.record_name(error_rate),
-                              test_monitor.record_name(error_rate)]],
-                            every_n_batches=20)]
+                              test_monitor.record_name(error_rate)]])]
     if config.load:
         load_params(config.model_path, model)
     if config.test:
