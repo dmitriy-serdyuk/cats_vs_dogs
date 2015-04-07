@@ -232,23 +232,21 @@ if __name__ == '__main__':
     if config.load:
         load_params(config.model_path, model)
     if True:
-        gradient_0 = tensor.grad(last_hidden[0, 0], x)
-        gradient_1 = tensor.grad(last_hidden[0, 1], x)
-        compute_grad = theano.function([x], [gradient_0, gradient_1])
+        input_initial = rng.normal(0, 0.001, (1, 280, 280, 3))
+        x_vis = theano.shared(input_initial, 'x_vis')
+        last_hidden_vis = convnet.apply(x_vis)
+        gradient_0 = tensor.grad(last_hidden_vis[0, 0], x_vis)
+        gradient_1 = tensor.grad(last_hidden_vis[0, 1], x_vis)
+        updates = {x_vis: x_vis - 1.e-4 * gradient_0}
+        make_step = theano.function([], [], updates=updates)
+
+        for i in xrange(1000):
+            make_step()
 
         from matplotlib import pyplot as plt
-        max = 0 
-        max_val= numpy.zeros((1, 3, 200, 200))
-        for i, data in enumerate(train_stream.get_epoch_iterator()):
-            grad_0_val, grad_1_val = compute_grad(data[0])
-            if grad_0_val.sum() > max:
-                max_val = grad_0_val
-
-                max = grad_0_val.sum()
-            print i
-            if i % 30 == 0:
-                plt.imshow(numpy.cast['uint8'](max_val[0].transpose(1, 2, 0) * 65. + 114.))
-                plt.show()
+        max_val = x_vis.get_value()
+        plt.imshow(numpy.cast['uint8'](max_val[0].transpose(1, 2, 0) * 65. + 114.))
+        plt.show()
         from scipy import misc
         path = '/data/lisatmp3/serdyuk/catsvsdogs/test1/'
         predict = theano.function([x], [last_hidden, Softmax().apply(last_hidden)])
