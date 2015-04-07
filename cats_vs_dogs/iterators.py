@@ -116,6 +116,15 @@ class Hdf5Dataset(Dataset):
     def get_data(self, state=None, request=None):
         if not request:
             raise StopIteration
+        if self.start:
+            if isinstance(request, slice):
+                request = slice(request.start + self.start,
+                        request.stop + self.start, request.step)
+            elif isinstance(request, list):
+                request = [index + self.start for index in request]
+            else:
+                raise ValueError
+
         data = [node[request] for node in self.nodes]
         return data
 
@@ -150,6 +159,9 @@ class DogsVsCats(Hdf5Dataset):
         super(DogsVsCats, self).__init__(self.provides_sources, start, stop,
                                          path, sources_in_file=['X', 'y', 's'])
 
+    def get_data(self, state=None, request=None):
+        return super(DogsVsCats, self).get_data(state=state, request=request)
+
 
 class OneHotEncoder(Transformer):
     def __init__(self, num_classes, **kwargs):
@@ -165,24 +177,36 @@ class OneHotEncoder(Transformer):
 
 
 class Reshape(Transformer):
-    def __init__(self,  **kwargs):
-        super(Reshape, self).__init__(**kwargs)
+    def __init__(self, data_stream, image_source, shape_source):
+        super(Reshape, self).__init__(data_stream)
+        self.shape_source = shape_source
+        self.image_source = image_source
 
     @property
     def sources(self):
         return [source for source in self.data_stream.sources
-                if source != 'shape']
+                if source != self.shape_source]
 
     def get_data(self, request=None):
-        X, y, s = next(self.child_epoch_iterator)
-        X = X.reshape(s)
-        return X, y
+        data = next(self.child_epoch_iterator)
+        data = OrderedDict(zip(self.data_stream.sources, data))
+        X = data[self.image_source]
+        s = data[self.shape_source]
+        data[self.image_source] = X.reshape(s)
+        return data.values()
 
 
 class ImageTranspose(Transformer):
+    def __init__(self, data_stream, image_source):
+        super(ImageTranspose, self).__init__(data_stream)
+        self.image_source = image_source
+
     def get_data(self, request=None):
-        X, y = next(self.child_epoch_iterator)
-        return X.transpose(0, 3, 1, 2), y
+        data = next(self.child_epoch_iterator)
+        data= OrderedDict(zip(self.data_stream.sources, data))
+        X = data[self.image_source]
+        data[self.image_source] = X.transpose(0, 3, 1, 2)
+        return data.values()
 
 
 class Unbatch(Transformer):
@@ -214,25 +238,21 @@ class RandomCrop(Transformer):
         Size of the square crop. Must be bigger than scaled_size.
     rng : int or rng, optional
         RNG or seed for an RNG
-    """
-    _default_seed = 2015 + 1 + 18
 
-    def __init__(self, scaled_size, crop_size, rng, **kwargs):
+    """
+    def __init__(self, image_source, scaled_size, crop_size, rng, **kwargs):
         super(RandomCrop, self).__init__(**kwargs)
         self.scaled_size = scaled_size
         self.crop_size = crop_size
         if not self.scaled_size > self.crop_size:
             raise ValueError('Scaled size should be greater than crop size')
-        if rng:
-            self.rng = rng
-        else:
-            self.rng = np.RandomState(self._default_seed)
-
-    def get_shape(self):
-        return (self.crop_size, self.crop_size)
+        self.rng = rng
+        self.image_source = image_source
 
     def get_data(self, request=None):
-        X, y = next(self.child_epoch_iterator)
+        data = next(self.child_epoch_iterator)
+        data = OrderedDict(zip(self.sources, data))
+        X = data[self.image_source]
         small_axis = np.argmin(X.shape[:-1])
         ratio = (1.0 * self.scaled_size) / X.shape[small_axis]
         resized_image = misc.imresize(X, ratio)
@@ -243,7 +263,8 @@ class RandomCrop(Transformer):
         j = self.rng.randint(low=0, high=max_j)
         cropped_image = resized_image[i: i + self.crop_size,
                                       j: j + self.crop_size, :]
-        return np.cast[floatX](cropped_image) / 256. - .5, y
+        data[self.image_source] = np.cast[floatX](cropped_image) / 256. - .5
+        return data.values()
 
 
 class RandomRotate(Transformer):
