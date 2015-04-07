@@ -141,6 +141,17 @@ if __name__ == '__main__':
                                                      'dogs_vs_cats',
                                                      'train.h5'))
     valid_stream = construct_stream(valid_dataset, config)
+    if True:
+        gradient_0 = tensor.grad(last_hidden[0], x)
+        gradient_1 = tensor.grad(last_hidden[1], x)
+        compute_grad = theano.function([x], [gradient_0, gradient_1])
+
+        from matplotlib import pyplot as plt
+        for data in train_stream.get_epoch_iterator():
+            grad_0_val, grad_1_val = compute_grad(data[0])
+            print grad_0_val
+            plt.imshow(grad_0_val[0].transpose(1, 2, 0))
+        plt.show()
 
     valid_monitor = DataStreamMonitoring(
         variables=test_outputs, data_stream=valid_stream, prefix="valid")
