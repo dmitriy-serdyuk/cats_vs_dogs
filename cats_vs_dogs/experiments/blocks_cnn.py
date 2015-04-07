@@ -181,17 +181,6 @@ if __name__ == '__main__':
                                                      'dogs_vs_cats',
                                                      'train.h5'))
     valid_stream = construct_stream(valid_dataset, config)
-    if True:
-        gradient_0 = tensor.grad(last_hidden[0], x)
-        gradient_1 = tensor.grad(last_hidden[1], x)
-        compute_grad = theano.function([x], [gradient_0, gradient_1])
-
-        from matplotlib import pyplot as plt
-        for data in train_stream.get_epoch_iterator():
-            grad_0_val, grad_1_val = compute_grad(data[0])
-            print grad_0_val
-            plt.imshow(grad_0_val[0].transpose(1, 2, 0))
-        plt.show()
 
     valid_monitor = DataStreamMonitoring(
         variables=test_outputs, data_stream=valid_stream, prefix="valid")
@@ -242,7 +231,24 @@ if __name__ == '__main__':
                               test_monitor.record_name(error_rate)]])]
     if config.load:
         load_params(config.model_path, model)
-    if config.test:
+    if True:
+        gradient_0 = tensor.grad(last_hidden[0, 0], x)
+        gradient_1 = tensor.grad(last_hidden[0, 1], x)
+        compute_grad = theano.function([x], [gradient_0, gradient_1])
+
+        from matplotlib import pyplot as plt
+        max = 0 
+        max_val= numpy.zeros((1, 3, 200, 200))
+        for i, data in enumerate(train_stream.get_epoch_iterator()):
+            grad_0_val, grad_1_val = compute_grad(data[0])
+            if grad_0_val.sum() > max:
+                max_val = grad_0_val
+
+                max = grad_0_val.sum()
+            print i
+            if i % 30 == 0:
+                plt.imshow(numpy.cast['uint8'](max_val[0].transpose(1, 2, 0) * 65. + 114.))
+                plt.show()
         from scipy import misc
         path = '/data/lisatmp3/serdyuk/catsvsdogs/test1/'
         predict = theano.function([x], [last_hidden, Softmax().apply(last_hidden)])
