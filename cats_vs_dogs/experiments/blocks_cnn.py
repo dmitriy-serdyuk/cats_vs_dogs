@@ -15,7 +15,7 @@ from blocks.algorithms import (GradientDescent, Scale, CompositeRule,
                                StepClipping, RMSProp)
 from blocks.bricks import Softmax, Rectifier
 from blocks.bricks.cost import CategoricalCrossEntropy, MisclassificationRate
-from blocks.initialization import IsotropicGaussian, Constant
+from blocks.initialization import IsotropicGaussian, Constant, Uniform
 from blocks.model import Model
 from blocks.main_loop import MainLoop
 from blocks.monitoring import aggregation
@@ -27,23 +27,29 @@ from blocks.extensions.saveload import Dump
 from blocks.extensions.training import SharedVariableModifier
 from blocks.dump import load_parameter_values
 from blocks.config_parser import Configuration
+from blocks.filter import VariableFilter
+from blocks.graph import ComputationGraph
 
 from fuel.datasets import IterableDataset
-from fuel.schemes import ConstantScheme, SequentialScheme
+from fuel.schemes import ConstantScheme, SequentialScheme, ShuffledScheme
 from fuel.streams import BatchDataStream, DataStream
+from fuel.transformers import Mapping, ForceFloatX
 
 from cats_vs_dogs.iterators import (DogsVsCats, Unbatch,
                                     RandomCrop, Reshape,
-                                    ImageTranspose, OneHotEncoder)
+                                    ImageTranspose, OneHotEncoder, GreySquare)
 from cats_vs_dogs.bricks import ConvNN, Dropout
 from cats_vs_dogs.algorithms import Adam
 from cats_vs_dogs.schemes import SequentialShuffledScheme
+from cats_vs_dogs.extensions import (ImageDataStreamDisplay, DisplayImage,
+                                     PlotManager)
 
 floatX = theano.config.floatX
 logging.basicConfig(level='INFO')
 
 
 def load_params(path, model):
+    print path
     parameters = load_parameter_values(path + '/params.npz')
     with open(path + '/log', "rb") as source:
         log = cPickle.load(source)
@@ -85,12 +91,16 @@ class ConfigCats(Configuration):
                     self.config[key]['yaml'] = value
 
 
-def construct_stream(dataset, config, test=False):
+def construct_stream(dataset, config, test=False, one_example=False):
     if test:
         scheme = None
     else:
         scheme = SequentialShuffledScheme(dataset.num_examples,
                                           config.batch_size, rng)
+    if one_example:
+        scheme = SequentialShuffledScheme(dataset.num_examples,
+                                          1, rng)
+
     stream = DataStream(
         dataset=dataset,
         iteration_scheme=scheme)
@@ -106,9 +116,39 @@ def construct_stream(dataset, config, test=False):
         batch_scheme = ConstantScheme(1)
     else:
         batch_scheme = ConstantScheme(config.batch_size)
+    if one_example:
+        batch_scheme = ConstantScheme(1)
     stream = BatchDataStream(data_stream=stream, iteration_scheme=batch_scheme)
     stream = ImageTranspose(stream, 'X')
+    stream = GreySquare(stream, 'X')
     return stream
+
+
+# Rescaling the data
+class Rescale(object):
+    def __init__(self, scale=1., shift=0.):
+        self.scale = scale
+        self.shift = shift
+
+    def __call__(self, x):
+        return (self.scale * (x[0] + self.shift),) + x[1:]
+
+
+# Getting around having tuples as argument and output
+class TupleMapping(object):
+    def __init__(self, fn, same_len_out=False, same_len_in=False):
+        self.fn = fn
+        self.same_len_out = same_len_out
+        self.same_len_in = same_len_in
+
+    def __call__(self, args):
+        if self.same_len_in:
+            rval = (self.fn(*args), )
+        else:
+            rval = (self.fn(args[0]), )
+        if self.same_len_out:
+            rval += args[1:]
+        return rval
 
 
 if __name__ == '__main__':
@@ -180,7 +220,7 @@ if __name__ == '__main__':
     valid_dataset = DogsVsCats('valid', os.path.join('${PYLEARN2_DATA_PATH}',
                                                      'dogs_vs_cats',
                                                      'train.h5'))
-    valid_stream = construct_stream(valid_dataset, config)
+    valid_stream = construct_stream(valid_dataset, config, one_example=True)
 
     valid_monitor = DataStreamMonitoring(
         variables=test_outputs, data_stream=valid_stream, prefix="valid")
@@ -203,7 +243,7 @@ if __name__ == '__main__':
         extensions += [adjust_learning_rate]
     model = Model(train_outputs[0])
     learn_params = OrderedDict([(name, param) for name, param in model.get_params().items()
-                                if not re.match('.*conv_pool_[0-2].*', name)
+                                if not re.match('.*conv_pool_[0-4].*', name)
                                 ])
     print 'learn_parameters', learn_params
     algorithm = GradientDescent(cost=train_outputs[0], step_rule=step_rule,
@@ -218,7 +258,8 @@ if __name__ == '__main__':
                    test_monitor,
                    ProgressBar(),
                    Printing(),
-                   Dump(config.model_path, after_epoch=True)]
+                   Dump(config.model_path, after_epoch=True)
+                   ]
     print train_monitor.record_name(cost)
     print valid_monitor.record_name(cost)
     if config.plot:
@@ -229,25 +270,136 @@ if __name__ == '__main__':
                              [train_monitor.record_name(error_rate),
                               valid_monitor.record_name(error_rate),
                               test_monitor.record_name(error_rate)]])]
+    # Deconvolution
+    num_filters = 10
+    x_repeated = x.repeat(num_filters, axis=0)
+    out = convnet.apply(x_repeated)
+    cg_repeat = ComputationGraph(out)
+    convnet_features_repeated, = VariableFilter(applications=[convnet.layers[0].apply], name='output')(cg_repeat.variables)
+    convnet_features_selected = convnet_features_repeated \
+        * tensor.eye(num_filters).repeat(
+            x.shape[0], axis=0
+        ).dimshuffle((0, 1, 'x', 'x'))
+    displayable_deconvolution = tensor.grad(error_rate, x_repeated,
+                                            known_grads={
+                                                convnet_features_selected:
+                                                    convnet_features_selected
+                                            })
+    deconvolution_normalizer = abs(
+        displayable_deconvolution
+    ).max(axis=(1, 2, 3))
+    displayable_deconvolution = displayable_deconvolution \
+        / deconvolution_normalizer.dimshuffle((0, 'x', 'x', 'x'))
+    get_displayable_deconvolution = theano.function(
+        [x], displayable_deconvolution
+    )
+    one_example_train_data_stream = construct_stream(train_dataset, config, one_example=True)
+    display_deconvolution_data_stream = Mapping(
+        data_stream=one_example_train_data_stream,
+        mapping=TupleMapping(get_displayable_deconvolution,
+                             same_len_out=True)
+    )
+    display_deconvolution = ImageDataStreamDisplay(
+        data_stream=display_deconvolution_data_stream,
+        source='X',
+        image_shape=(3, 32, 32),
+        axes=('c', 0, 1),
+        shift=0,
+        rescale=1.,
+    )
+
+    images_displayer = DisplayImage(
+        image_getters=[display_deconvolution],
+        titles=['Deconvolution']
+    )
+    plotters = []
+    plotters.append(images_displayer)
+
+    from scipy import misc
+    from matplotlib import pyplot as plt
     if config.load:
         load_params(config.model_path, model)
-    if True:
-        input_initial = rng.normal(0, 0.001, (1, 280, 280, 3))
+
+    extensions.append(PlotManager('2 layer deconvolution',
+                                  plotters=plotters,
+                                  after_epoch=False,
+                                  every_n_epochs=10,
+                                  after_training=True))
+
+    def visualise(unit, layer):
+        path = '/data/lisatmp3/serdyuk/catsvsdogs/test1/'
+        input_initial = rng.normal(0, 0.1, (1, 3, 280, 280))
+        #input_initial = numpy.array([(misc.imread(path + '1.jpg').transpose(2, 0, 1) - 114.) / 65.])[:, :, :280, :280]
+        #input_initial = numpy.zeros((1, 3, 280, 280))
         x_vis = theano.shared(input_initial, 'x_vis')
         last_hidden_vis = convnet.apply(x_vis)
-        gradient_0 = tensor.grad(last_hidden_vis[0, 0], x_vis)
-        gradient_1 = tensor.grad(last_hidden_vis[0, 1], x_vis)
-        updates = {x_vis: x_vis - 1.e-4 * gradient_0}
-        make_step = theano.function([], [], updates=updates)
+        cg_vis = ComputationGraph(last_hidden_vis)
 
-        for i in xrange(1000):
-            make_step()
+        out, = VariableFilter(applications=[convnet.layers[layer].apply],
+                              name='output')(cg_vis.variables)
+        #print out.ndim
+        #print theano.function([], out)().shape
 
-        from matplotlib import pyplot as plt
-        max_val = x_vis.get_value()
-        plt.imshow(numpy.cast['uint8'](max_val[0].transpose(1, 2, 0) * 65. + 114.))
-        plt.show()
-        from scipy import misc
+        out = out[0, unit, 0, 0]
+        #out = Softmax().apply(last_hidden_vis)[0, 0]
+        #out = last_hidden_vis[0, 1] #/ last_hidden_vis.sum()
+        gradient_1 = tensor.grad(out - 0.1 * (x_vis ** 2).sum()
+                                , x_vis)
+        lr = theano.shared(1.e-1)
+        updates = {x_vis: x_vis + lr * gradient_1}
+        updates[lr] = lr * 0.999
+        make_step = theano.function([], [gradient_1, out], updates=updates)
+        compute_prob = theano.function([x], last_hidden)
+
+        for i in xrange(600):
+            grad, val = make_step()
+            print lr.get_value()
+            print 'step', i, 'val', val
+
+        max_val = grad#.get_value()
+        std = max_val.std()
+        mean = max_val.mean()
+        print max_val[0].transpose(1, 2, 0)
+        print compute_prob(x_vis.get_value())
+        print grad
+        #max_val = (max_val[0].transpose(1, 2, 0) - mean) / std * 65. + 128.
+        #plt.imshow(numpy.cast['uint8'](max_val))
+        #plt.show()
+        val = x_vis.get_value()[0]#[0, :, 0:10, :10]
+        return val, (max_val[0] - mean) / std
+
+    if True:
+        print 'start comp'
+        compute_prob = theano.function([x], Softmax().apply(last_hidden))
+        print 'start comp'
+        for data in valid_stream.get_epoch_iterator():
+            image = numpy.zeros_like(data[0])
+            probs_all = []
+            for i in xrange(28 * 28):
+                print i
+                print data[0][i * 100:(i + 1) * 100, 0, :, :, :].shape
+                #probs = compute_prob(data[0][i * 100:(i + 1) * 100, 0, :, :, :])
+                #probs_all.append(probs)
+            probs_all = numpy.concatenate(probs_all, axis=0)
+            print probs_all.shape
+            image = probs_all[:, 0].reshape((280, 280))
+            assert False
+        vals = []
+        grads = []
+        for i in xrange(1):
+            val, grad = visualise(11, 2)
+            vals.append(val)
+            grads.append(grad)
+
+        for i in xrange(10):
+            plt.imshow(numpy.cast['uint8'](vals[i].transpose(1, 2, 0) * 65. + 128.),
+                       interpolation='none')
+            plt.show()
+            plt.imshow(numpy.cast['uint8'](grads[i].transpose(1, 2, 0) * 65. + 128.),
+                       interpolation='none')
+            plt.show()
+        #numpy.save('1layer_layer0_maps.npy', vals)
+        assert False
         path = '/data/lisatmp3/serdyuk/catsvsdogs/test1/'
         predict = theano.function([x], [last_hidden, Softmax().apply(last_hidden)])
         for filename in os.listdir(path):
