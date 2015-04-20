@@ -1,19 +1,61 @@
 import os
 import cPickle as pkl
+from collections import OrderedDict, deque
 import math
-from abc import abstractmethod, ABCMeta
-from collections import OrderedDict
+import tables
 from picklable_itertools import izip
 
 import numpy as np
-from scipy import misc, ndimage
+from scipy import misc
 
 import theano
 
-from fuel.datasets.hdf5 import Hdf5Dataset
+from fuel.datasets import Dataset
 from fuel.transformers import Transformer
 
+from pylearn2.utils.string_utils import preprocess
+from pylearn2.datasets import cache
+
 floatX = theano.config.floatX
+
+
+class SingleIterator(object):
+    def __init__(self, directory, subset, floatX='float32'):
+        load_path = os.path.join(directory, '../datasets.pkl')
+        with open(load_path, 'r') as fin:
+            train, valid, test = pkl.load(fin)
+        if subset == 'train':
+            self.data_files = train
+        elif subset == 'valid':
+            self.data_files = valid
+        elif subset == 'test':
+            self.data_files = test
+        else:
+            raise ValueError('Incorrect subset, possible values are train, '
+                             'valid, or test')
+        self.directory = directory
+        self.floatX = floatX
+
+    def __iter__(self):
+        for data_file in self.data_files:
+            full_path = os.path.join(self.directory, data_file)
+            with open(full_path, 'r') as fin:
+                image, label = pkl.load(fin)
+            yield image, np.array(label, dtype=self.floatX)
+
+
+class SingleH5Iterator(object):
+    def __init__(self, data_file, subset, floatX='float32'):
+        self.X = data_file.get_node('/' + subset + '/X')
+        self.y = data_file.get_node('/' + subset + '/y')
+        self.s = data_file.get_node('/' + subset + '/s')
+        self.floatX = floatX
+
+    def __iter__(self):
+        for X, y, shape in izip(self.X.iterrows(), self.y.iterrows(),
+                               self.s.iterrows()):
+            yield (np.cast[self.floatX](X.reshape(shape)),
+                   np.cast[self.floatX](y))
 
 
 class ResizingIterator(object):
@@ -47,6 +89,55 @@ class BatchIterator(object):
         return np.array(images), np.array(labels)
 
 
+class Hdf5Dataset(Dataset):
+    def __init__(self, sources, start, stop, path, data_node='Data',
+                 sources_in_file=None):
+        if sources_in_file is None:
+            sources_in_file = sources
+        self.sources_in_file = sources_in_file
+        self.provides_sources = sources
+        self.path = path
+        self.data_node = data_node
+        self.start = start
+        self.stop = stop
+        self.num_examples = self.stop - self.start
+        # Locally cache the files before reading them
+        path = preprocess(self.path)
+        datasetCache = cache.datasetCache
+        self.path = datasetCache.cache_file(path)
+        h5file = tables.openFile(self.path, mode="r")
+        node = h5file.getNode('/', self.data_node)
+
+        self.nodes = [getattr(node, source) for source in self.sources_in_file]
+        super(Hdf5Dataset, self).__init__(self.provides_sources)
+
+    def get_data(self, state=None, request=None):
+        if not request:
+            raise StopIteration
+        if self.start:
+            if isinstance(request, slice):
+                request = slice(request.start + self.start,
+                        request.stop + self.start, request.step)
+            elif isinstance(request, list):
+                request = [index + self.start for index in request]
+            else:
+                raise ValueError
+
+        data = [node[request] for node in self.nodes]
+        return data
+
+    def __getstate__(self):
+        dict = self.__dict__
+        return {key: val for key, val in dict.iteritems() if key != 'nodes'}
+
+    def __setstate__(self, state):
+        self.__dict__ = state
+        h5file = tables.openFile(self.path, mode="r")
+        node = h5file.getNode('/', self.data_node)
+
+        self.nodes = [getattr(node, source) for source in self.sources_in_file]
+
+
 class DogsVsCats(Hdf5Dataset):
     provides_sources = ['X', 'y', 'shape']
 
@@ -66,105 +157,60 @@ class DogsVsCats(Hdf5Dataset):
         super(DogsVsCats, self).__init__(self.provides_sources, start, stop,
                                          path, sources_in_file=['X', 'y', 's'])
 
+    def get_data(self, state=None, request=None):
+        return super(DogsVsCats, self).get_data(state=state, request=request)
 
-class DataTransformer(Transformer):
-    __metaclass__ = ABCMeta
 
-    @abstractmethod
-    def transform_data(self, data):
-        pass
+class OneHotEncoder(Transformer):
+    def __init__(self, num_classes, **kwargs):
+        self.num_classes = num_classes
+        super(OneHotEncoder, self).__init__(**kwargs)
 
     def get_data(self, request=None):
-        data = next(self.child_epoch_iterator)
-        data = OrderedDict(zip(self.data_stream.sources, data))
-
-        out_data = self.transform_data(data)
-
-        return [value for name, value in out_data.iteritems()
-                if name in self.sources]
+        X, y, s = next(self.child_epoch_iterator)
+        batch_size = y.shape[0]
+        out_y = np.zeros((batch_size, self.num_classes), dtype='int64')
+        out_y[(xrange(batch_size), y[:, 0])] = 1
+        return X, out_y, s
 
 
-class OneHotEncoderStream(DataTransformer):
-    """Does one-hot encoding.
-
-    Parameters
-    ----------
-    num_classes : int
-        Total number of classes.
-    target_source : str
-        Target source name.
-
-    """
-    def __init__(self, num_classes, target_source, **kwargs):
-        self.num_classes = num_classes
-        self.target_source = target_source
-        super(OneHotEncoderStream, self).__init__(**kwargs)
-
-    def transform_data(self, data):
-        target = data[self.target_source]
-
-        batch_size = target.shape[0]
-        out_target = np.zeros((batch_size, self.num_classes), dtype='int64')
-        out_target[(xrange(batch_size), target[0])] = 1
-        data[self.target_source] = out_target
-        return data
-
-
-class Reshape(DataTransformer):
-    """Reshapes image.
-
-    Parameters
-    ----------
-    image_source : str
-        Source name where the image is stored.
-    shape_source : str
-        Source name where the image shape is stored.
-
-    """
-    def __init__(self,  image_source, shape_source, **kwargs):
-        self.image_source = image_source
+class Reshape(Transformer):
+    def __init__(self, data_stream, image_source, shape_source):
+        super(Reshape, self).__init__(data_stream)
         self.shape_source = shape_source
-        super(Reshape, self).__init__(**kwargs)
+        self.image_source = image_source
 
     @property
     def sources(self):
         return [source for source in self.data_stream.sources
                 if source != self.shape_source]
 
-    def transform_data(self, data):
-        image = data[self.image_source]
-        shape = data[self.shape_source]
+    def get_data(self, request=None):
+        data = next(self.child_epoch_iterator)
+        data = OrderedDict(zip(self.data_stream.sources, data))
+        X = data[self.image_source]
+        s = data[self.shape_source]
+        data[self.image_source] = X.reshape(s)
+        return data.values()
 
-        image = np.array(image).reshape(shape)
 
-        data[self.image_source] = image
-        return data
-
-
-class ImageTranspose(DataTransformer):
-    """Transposes batch of images.
-
-    Parameters
-    ----------
-    image_sources : str
-        Source name where the image is stored.
-
-    """
-    def __init__(self, image_source, **kwargs):
+class ImageTranspose(Transformer):
+    def __init__(self, data_stream, image_source):
+        super(ImageTranspose, self).__init__(data_stream)
         self.image_source = image_source
-        super(ImageTranspose, self).__init__(**kwargs)
 
-    def transform_data(self, data):
-        image = data[self.image_source]
-        image = image.transpose(0, 3, 1, 2)
-        data[self.image_source] = image
-        return data
+    def get_data(self, request=None):
+        data = next(self.child_epoch_iterator)
+        data= OrderedDict(zip(self.data_stream.sources, data))
+        X = data[self.image_source]
+        data[self.image_source] = X.transpose(0, 3, 1, 2)
+        return data.values()
 
 
-class UnbatchStream(Transformer):
+class Unbatch(Transformer):
     def __init__(self, **kwargs):
         self.data = None
-        super(UnbatchStream, self).__init__(**kwargs)
+        super(Unbatch, self).__init__(**kwargs)
 
     def get_data(self, request=None):
         if not self.data:
@@ -178,7 +224,7 @@ class UnbatchStream(Transformer):
             return self.get_data()
 
 
-class RandomCrop(DataTransformer):
+class RandomCrop(Transformer):
     """
     Crops a square at random on a rescaled version of the image
 
@@ -188,31 +234,26 @@ class RandomCrop(DataTransformer):
         Size of the smallest side of the image after rescaling
     crop_size : int
         Size of the square crop. Must be bigger than scaled_size.
-    image_source : str
-        Source name where the image is stored.
     rng : int or rng, optional
         RNG or seed for an RNG
-    """
-    _default_seed = 2015 + 1 + 18
 
-    def __init__(self, scaled_size, crop_size, image_source, rng, **kwargs):
+    """
+    def __init__(self, image_source, scaled_size, crop_size, rng, **kwargs):
+        super(RandomCrop, self).__init__(**kwargs)
         self.scaled_size = scaled_size
         self.crop_size = crop_size
-        self.image_source = image_source
         if not self.scaled_size > self.crop_size:
             raise ValueError('Scaled size should be greater than crop size')
-        if rng:
-            self.rng = rng
-        else:
-            self.rng = np.RandomState(self._default_seed)
-        super(RandomCrop, self).__init__(**kwargs)
+        self.rng = rng
+        self.image_source = image_source
 
-    def transform_data(self, data):
-        image = data[self.image_source]
-
-        small_axis = np.argmin(image.shape[:-1])
-        ratio = (1.0 * self.scaled_size) / image.shape[small_axis]
-        resized_image = misc.imresize(image, ratio)
+    def get_data(self, request=None):
+        data = next(self.child_epoch_iterator)
+        data = OrderedDict(zip(self.sources, data))
+        X = data[self.image_source]
+        small_axis = np.argmin(X.shape[:-1])
+        ratio = (1.0 * self.scaled_size) / X.shape[small_axis]
+        resized_image = misc.imresize(X, ratio)
 
         max_i = resized_image.shape[0] - self.crop_size
         max_j = resized_image.shape[1] - self.crop_size
@@ -220,32 +261,11 @@ class RandomCrop(DataTransformer):
         j = self.rng.randint(low=0, high=max_j)
         cropped_image = resized_image[i: i + self.crop_size,
                                       j: j + self.crop_size, :]
-        data[self.image_source] = cropped_image
-        return data
+        data[self.image_source] = np.cast[floatX](cropped_image) / 256. - .5
+        return data.values()
 
 
-class Normalize(DataTransformer):
-    """Normalizes image.
-
-    Parameters
-    ----------
-    image_source : str
-        Name of a source where image is stored.
-
-    """
-    def __init__(self, image_source, **kwargs):
-        self.image_source = image_source
-        super(Normalize, self).__init__(**kwargs)
-
-    def transform_data(self, data):
-        image = data[self.image_source]
-
-        image = np.cast[floatX](image) / 256. - .5
-        data[self.image_source] = image
-        return data
-
-
-class RandomRotate(DataTransformer):
+class RandomRotate(Transformer):
     """Rotates image.
 
     Rotates image on a random angle in order to get another one
@@ -258,31 +278,23 @@ class RandomRotate(DataTransformer):
         The size of a side of a square image.
     output_size : int
         Desired output size.
-    image_source : str
-        Source name where image is stored.
     rng : :class:`~random.RandomState`
         Random number generator
 
     """
-    def __init__(self, input_size, output_size, image_source, rng, **kwargs):
+    def __init__(self, input_size, output_size, rng, **kwargs):
         self.max_angle = math.asin((input_size ** 2 - output_size ** 2) /
                                    float(input_size * output_size))
         self.rng = rng
         self.input_size = input_size
         self.output_size = output_size
-        self.image_source = image_source
         super(RandomRotate, self).__init__(**kwargs)
 
-    def transform_data(self, data):
-        image = data[self.image_source]
-
-        sample_angle = (self.rng.random_sample() - 0.5) * self.max_angle
-        new_image = ndimage.interpolation.rotate(image, sample_angle /
-                                                 math.pi * 180.)
-        new_image_size = new_image.shape[0]
-        start = (new_image_size - self.output_size) / 2.
-        stop = new_image_size - start
-        reshaped = new_image[start: stop, start: stop, :]
-
-        data[self.image_source] = reshaped
-        return data
+    def get_data(self, request=None):
+        X, y = next(self.child_epoch_iterator)
+        sample_angle = (self.ng.random_sample() - 0.5) * 2 * self.max_angle
+        new_image = misc.ndimage.interpolation.rotate(X, sample_angle)
+        start = (self.input_size - self.output_size) / 2.
+        stop = self.output_size - (self.input_size - self.output_size) / 2.
+        reshaped = new_image[start, stop, :]
+        return reshaped, y

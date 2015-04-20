@@ -30,14 +30,17 @@ class ContrastNormalization(Brick):
 class ConvNN(Sequence, Initializable, Feedforward):
     def __init__(self, conv_activations, num_channels, image_shape,
                  filter_sizes, feature_maps, pooling_sizes,
-                 top_mlp_activations, top_mlp_dims, conv_step=(1, 1),
+                 top_mlp_activations, top_mlp_dims, conv_step=None,
                  border_mode='valid', **kwargs):
+        if conv_step is None:
+            self.conv_step = (1, 1)
+        else:
+            self.conv_step = conv_step
         self.num_channels = num_channels
         self.image_shape = image_shape
         self.top_mlp_activations = top_mlp_activations
         self.top_mlp_dims = top_mlp_dims
         self.border_mode = border_mode
-        self.conv_step = conv_step
 
         params = zip(conv_activations, filter_sizes, feature_maps,
                      pooling_sizes)
@@ -76,3 +79,34 @@ class ConvNN(Sequence, Initializable, Feedforward):
 
         self.top_mlp.activations = self.top_mlp_activations
         self.top_mlp.dims = [numpy.prod(conv_out_dim)] + self.top_mlp_dims
+
+
+class Dropout(object):
+    def __init__(self, prob, inputs, outputs):
+        self.graph = ComputationGraph(outputs)
+        self.inputs = inputs
+        self.outputs = outputs
+        self.prob = prob
+
+    def train_model(self):
+        srng = RandomStreams(seed=876)
+        input_vars = VariableFilter(roles=[INPUT])(self.graph)
+        replacements = {var: var * srng.binomial(var.shape, p=self.prob,
+                                                 dtype=floatX)
+                        for var in input_vars if re.match('linear', var.name)}
+        new_graph = self.graph.replace(replacements)
+        out_names = [o.name for o in self.outputs]
+        new_outputs = [var for var in new_graph.outputs
+                       if var.name in out_names]
+        return new_outputs
+
+    def test_model(self):
+        weight_vars = VariableFilter(roles=[WEIGHT])(self.graph)
+        replacements = {var: var * self.prob for var in weight_vars
+                        if re.match('linear', var.name)}
+        new_graph = self.graph.replace(replacements)
+        out_names = [o.name for o in self.outputs]
+        new_outputs = [var for var in new_graph.outputs
+                       if var.name in out_names]
+        return new_outputs
+

@@ -2,7 +2,7 @@ __author__ = 'dima'
 
 import six
 
-from blocks.datasets.schemes import BatchScheme
+from fuel.schemes import BatchScheme
 
 
 class SequentialShuffledScheme(BatchScheme):

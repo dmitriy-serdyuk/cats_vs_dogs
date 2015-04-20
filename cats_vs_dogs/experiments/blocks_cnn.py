@@ -2,6 +2,9 @@ import logging
 import os
 import argparse
 import yaml
+import cPickle
+import re
+from collections import OrderedDict
 
 import numpy
 
@@ -12,37 +15,46 @@ from blocks.algorithms import (GradientDescent, Scale, CompositeRule,
                                StepClipping, RMSProp)
 from blocks.bricks import Softmax, Rectifier
 from blocks.bricks.cost import CategoricalCrossEntropy, MisclassificationRate
-from blocks.config_parser import Configuration
-from blocks.extensions import FinishAfter, Printing, Timing, ProgressBar
-from blocks.extensions.monitoring import (DataStreamMonitoring,
-                                          TrainingDataMonitoring)
-from blocks.extensions.plot import Plot
-from blocks.extensions.saveload import LoadFromDump, Dump
-from blocks.extensions.training import SharedVariableModifier
-from blocks.filter import VariableFilter
-from blocks.graph import ComputationGraph, apply_dropout
-from blocks.initialization import IsotropicGaussian, Constant
+from blocks.initialization import IsotropicGaussian, Constant, Uniform
 from blocks.model import Model
 from blocks.main_loop import MainLoop
 from blocks.monitoring import aggregation
-from blocks.roles import INPUT, WEIGHT
-from blocks.select import Selector
+from blocks.extensions import FinishAfter, Printing, ProgressBar
+from blocks.extensions.monitoring import (DataStreamMonitoring,
+                                          TrainingDataMonitoring)
+from blocks.extensions.plot import Plot
+from blocks.extensions.saveload import Dump
+from blocks.extensions.training import SharedVariableModifier
+from blocks.dump import load_parameter_values
+from blocks.config_parser import Configuration
+from blocks.filter import VariableFilter
+from blocks.graph import ComputationGraph
 
-import fuel
-from fuel.streams import DataStream
-from fuel.schemes import ConstantScheme
-from fuel.transformers import Batch, MultiProcessing
+from fuel.datasets import IterableDataset
+from fuel.schemes import ConstantScheme, SequentialScheme, ShuffledScheme
+from fuel.streams import BatchDataStream, DataStream
+from fuel.transformers import Mapping, ForceFloatX
 
-from cats_vs_dogs.iterators import (DogsVsCats, UnbatchStream,
+from cats_vs_dogs.iterators import (DogsVsCats, Unbatch,
                                     RandomCrop, Reshape,
-                                    ImageTranspose, OneHotEncoderStream,
-                                    RandomRotate, Normalize)
-from cats_vs_dogs.bricks import ConvNN
+                                    ImageTranspose, OneHotEncoder, GreySquare)
+from cats_vs_dogs.bricks import ConvNN, Dropout
 from cats_vs_dogs.algorithms import Adam
 from cats_vs_dogs.schemes import SequentialShuffledScheme
+from cats_vs_dogs.extensions import (ImageDataStreamDisplay, DisplayImage,
+                                     PlotManager)
 
 floatX = theano.config.floatX
 logging.basicConfig(level='INFO')
+
+
+def load_params(path, model):
+    print path
+    parameters = load_parameter_values(path + '/params.npz')
+    with open(path + '/log', "rb") as source:
+        log = cPickle.load(source)
+    model.set_param_values(parameters)
+    #main_loop.log = log
 
 
 def parse_config(path):
@@ -62,11 +74,7 @@ def parse_config(path):
     config.add_config('learning_rate', type_=float, default=1.e-4)
     config.add_config('dropout', type_=bool, default=False)
     config.add_config('plot', type_=bool, default=False)
-    config.add_config('rotate', type_=bool, default=True)
-    config.add_config('usel2', type_=bool, default=False)
-    config.add_config('l2regularization', type_=float, default=0.01)
-    config.add_config('max_store', type_=int, default=5)
-    config.add_config('do_not_train_conv', type_=bool, default=False)
+    config.add_config('test', type_=bool, default=False)
     config.load_yaml(path)
     return config
 
@@ -83,72 +91,86 @@ class ConfigCats(Configuration):
                     self.config[key]['yaml'] = value
 
 
-def construct_stream(dataset, config, train=False):
-    rng = numpy.random.RandomState(9682)
+def construct_stream(dataset, config, test=False, one_example=False):
+    if test:
+        scheme = None
+    else:
+        scheme = SequentialShuffledScheme(dataset.num_examples,
+                                          config.batch_size, rng)
+    if one_example:
+        scheme = SequentialShuffledScheme(dataset.num_examples,
+                                          1, rng)
+
     stream = DataStream(
         dataset=dataset,
-        iteration_scheme=SequentialShuffledScheme(dataset.num_examples,
-                                                  config.batch_size, rng))
-    stream = UnbatchStream(data_stream=stream)
-
-    stream = Reshape(data_stream=stream, image_source='X',
-                     shape_source='shape')
-    if config.rotate and train:
-        crop_size = (config.image_shape + config.scaled_size) / 2.
-    else:
-        crop_size = config.image_shape
-    stream = RandomCrop(data_stream=stream,
-                        crop_size=crop_size,
-                        scaled_size=config.scaled_size,
-                        image_source='X',
-                        rng=rng)
-    if config.rotate and train:
-        stream = RandomRotate(data_stream=stream,
-                              input_size=crop_size,
-                              output_size=config.image_shape,
-                              image_source='X',
-                              rng=rng)
-    stream = RandomCrop(data_stream=stream,
+        iteration_scheme=scheme)
+    if not test:
+        stream = OneHotEncoder(num_classes=2, data_stream=stream)
+        stream = Unbatch(data_stream=stream)
+    if not test:
+        stream = Reshape(stream, 'X', 'shape')
+    stream = RandomCrop(data_stream=stream, image_source='X',
                         crop_size=config.image_shape,
-                        scaled_size=config.scaled_size,
-                        image_source='X',
-                        rng=rng)
-    stream = Normalize(data_stream=stream, image_source='X')
-    stream = Batch(
-        data_stream=stream,
-        iteration_scheme=ConstantScheme(config.batch_size))
-    stream = OneHotEncoderStream(num_classes=2, data_stream=stream,
-                                 target_source='y')
-    stream = ImageTranspose(data_stream=stream, image_source='X')
-
+                        scaled_size=config.scaled_size, rng=rng)
+    if test:
+        batch_scheme = ConstantScheme(1)
+    else:
+        batch_scheme = ConstantScheme(config.batch_size)
+    if one_example:
+        batch_scheme = ConstantScheme(1)
+    stream = BatchDataStream(data_stream=stream, iteration_scheme=batch_scheme)
+    stream = ImageTranspose(stream, 'X')
+    stream = GreySquare(stream, 'X')
     return stream
 
 
-class AttrDict(dict):
-    def __init__(self, *args, **kwargs):
-        super(AttrDict, self).__init__(*args, **kwargs)
-        self.__dict__ = self
+# Rescaling the data
+class Rescale(object):
+    def __init__(self, scale=1., shift=0.):
+        self.scale = scale
+        self.shift = shift
+
+    def __call__(self, x):
+        return (self.scale * (x[0] + self.shift),) + x[1:]
 
 
-def main(**kwargs):
-    config = AttrDict(kwargs)
+# Getting around having tuples as argument and output
+class TupleMapping(object):
+    def __init__(self, fn, same_len_out=False, same_len_in=False):
+        self.fn = fn
+        self.same_len_out = same_len_out
+        self.same_len_in = same_len_in
+
+    def __call__(self, args):
+        if self.same_len_in:
+            rval = (self.fn(*args), )
+        else:
+            rval = (self.fn(args[0]), )
+        if self.same_len_out:
+            rval += args[1:]
+        return rval
+
+
+if __name__ == '__main__':
+    logging.info('.. starting')
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--config', default='config.yml')
+    args = parser.parse_args()
+    config = parse_config(args.config)
 
     conv_activations = [Rectifier() for _ in config.feature_maps]
     mlp_activations = [Rectifier() for _ in config.mlp_hiddens] + [None]
     convnet = ConvNN(conv_activations, config.channels,
-                     (config.image_shape,) * 2,
-                     filter_sizes=zip(config.conv_sizes, config.conv_sizes),
-                     feature_maps=config.feature_maps,
-                     pooling_sizes=zip(config.pool_sizes, config.pool_sizes),
-                     top_mlp_activations=mlp_activations,
-                     top_mlp_dims=config.mlp_hiddens + [2],
-                     border_mode='full',
-                     weights_init=IsotropicGaussian(0.1),
-                     biases_init=Constant(0))
+                   (config.image_shape,) * 2,
+                   filter_sizes=zip(config.conv_sizes, config.conv_sizes),
+                   feature_maps=config.feature_maps,
+                   pooling_sizes=zip(config.pool_sizes, config.pool_sizes),
+                   top_mlp_activations=mlp_activations,
+                   top_mlp_dims=config.mlp_hiddens + [2],
+                   border_mode='full',
+                   weights_init=IsotropicGaussian(0.1),
+                   biases_init=Constant(0))
     convnet.initialize()
-    for layer in convnet.layers:
-        logging.info('layer dim: (%d, %d, %d)' % layer.get_dim('input_'))
-    logging.info('layer dim: (%d, %d, %d)' % layer.get_dim('output'))
 
     x = tensor.tensor4('X')
     y = tensor.lmatrix('y')
@@ -162,44 +184,53 @@ def main(**kwargs):
     ouputs = [cost, error_rate]
     train_outputs = ouputs
     test_outputs = ouputs
-    cg = ComputationGraph(cost)
     if config.dropout:
-        last_inputs = VariableFilter(bricks=[convnet.top_mlp],
-                                     roles=[INPUT])(cg.variables)
-        cg_dropout = apply_dropout(cg, last_inputs, 0.5)
-        train_outputs = cg_dropout.outputs
-    if config.usel2:
-        weights = VariableFilter(roles=[WEIGHT])(cg.variables)
-        train_outputs[0] = (cost + config.l2regularization *
-                            sum([(weight ** 2).sum() for weight in weights]))
-        test_outputs[0] = (cost + config.l2regularization *
-                           sum([(weight ** 2).sum() for weight in weights]))
+        dropout = Dropout(0.5, [x, y], ouputs)
+        train_outputs = dropout.train_model()
+        test_outputs = dropout.test_model()
 
     logging.info('.. model built')
-    train_dataset = DogsVsCats('train', os.path.join(fuel.config.data_path,
+    rng = numpy.random.RandomState(2014 + 02 + 04)
+    train_dataset = DogsVsCats('train', os.path.join('${PYLEARN2_DATA_PATH}',
                                                      'dogs_vs_cats',
                                                      'train.h5'))
-    train_stream = construct_stream(train_dataset, config, train=True)
-    test_dataset = DogsVsCats('test', os.path.join(fuel.config.data_path,
+    train_stream = construct_stream(train_dataset, config)
+    from matplotlib import pyplot as plt
+    #print 'start iter'
+    #for data in train_stream.get_epoch_iterator():
+    #    print 'start show'
+    #    print data[0][0].shape
+    #    plt.imshow(numpy.cast['uint8'](data[0][0].transpose(1, 2, 0) * 65. + 114.))
+    #    plt.show()
+    #    print 'end show'
+    #    break
+
+    test_dataset = DogsVsCats('test', os.path.join('${PYLEARN2_DATA_PATH}',
                                                    'dogs_vs_cats',
                                                    'train.h5'))
     test_stream = construct_stream(test_dataset, config)
-    valid_dataset = DogsVsCats('valid', os.path.join(fuel.config.data_path,
+    #for data in test_stream.get_epoch_iterator():
+    #    plt.imshow(numpy.cast['uint8'](data[0][0].transpose(1, 2, 0) * 65. + 114.))
+    #    plt.show()
+    #    break
+
+    #for i, data in enumerate(test_stream.get_epoch_iterator()):
+    #    pass
+    #print i
+    valid_dataset = DogsVsCats('valid', os.path.join('${PYLEARN2_DATA_PATH}',
                                                      'dogs_vs_cats',
                                                      'train.h5'))
-    valid_stream = construct_stream(valid_dataset, config)
+    valid_stream = construct_stream(valid_dataset, config, one_example=True)
 
     valid_monitor = DataStreamMonitoring(
         variables=test_outputs, data_stream=valid_stream, prefix="valid")
     test_monitor = DataStreamMonitoring(
         variables=test_outputs, data_stream=test_stream, prefix="test")
 
-    extensions = [ProgressBar()]
-    if config.load:
-        extensions.append(LoadFromDump(config.model_path))
+    extensions = []
 
     if config.algorithm == 'adam':
-        step_rule = Adam(config.learning_rate)
+        step_rule = Adam()
     elif config.algorithm == 'rms_prop':
         step_rule = RMSProp(config.learning_rate)
     else:
@@ -209,44 +240,135 @@ def main(**kwargs):
         adjust_learning_rate = SharedVariableModifier(
             sgd.learning_rate,
             lambda n: 10. / (10. / config.learning_rate + n))
-        extensions.append(adjust_learning_rate)
-    if config.do_not_train_conv:
-        parameters = Selector([convnet.top_mlp]).get_params()
+        extensions += [adjust_learning_rate]
+    model = Model(train_outputs[0])
+    learn_params = OrderedDict([(name, param) for name, param in model.get_params().items()
+                                if not re.match('.*conv_pool_[0-4].*', name)
+                                ])
+    print 'learn_parameters', learn_params
     algorithm = GradientDescent(cost=train_outputs[0], step_rule=step_rule,
-                                params=cg.parameters)
+                                params=learn_params.values())
     train_monitor = TrainingDataMonitoring(
         variables=train_outputs + [
-            aggregation.mean(algorithm.total_gradient_norm)],
+                   aggregation.mean(algorithm.total_gradient_norm)],
         prefix="train", after_epoch=True)
-    extensions.extend([FinishAfter(after_n_epochs=config.epochs),
-                       train_monitor,
-                       valid_monitor,
-                       test_monitor,
-                       Printing(),
-                       Dump(config.model_path, after_epoch=True,
-                            before_first_epoch=True)])
+    extensions += [FinishAfter(after_n_epochs=config.epochs),
+                   train_monitor,
+                   valid_monitor,
+                   test_monitor,
+                   ProgressBar(),
+                   Printing(),
+                   Dump(config.model_path, after_epoch=True)
+                   ]
+    print train_monitor.record_name(cost)
+    print valid_monitor.record_name(cost)
     if config.plot:
-        extensions.extend([Plot(os.path.basename(config.model_path),
-                                [[train_monitor.record_name(cost),
-                                  valid_monitor.record_name(cost),
-                                  test_monitor.record_name(cost)],
-                                 [train_monitor.record_name(error_rate),
-                                  valid_monitor.record_name(error_rate),
-                                  test_monitor.record_name(error_rate)]],
-                                every_n_batches=20)])
+        extensions += [Plot(os.path.basename(config.model_path),
+                            [[train_monitor.record_name(cost),
+                              valid_monitor.record_name(cost),
+                              test_monitor.record_name(cost)],
+                             [train_monitor.record_name(error_rate),
+                              valid_monitor.record_name(error_rate),
+                              test_monitor.record_name(error_rate)]])]
+    # Deconvolution
+    num_filters = 10
+    x_repeated = x.repeat(num_filters, axis=0)
+    out = convnet.apply(x_repeated)
+    cg_repeat = ComputationGraph(out)
+    convnet_features_repeated, = VariableFilter(applications=[convnet.layers[0].apply], name='output')(cg_repeat.variables)
+    convnet_features_selected = convnet_features_repeated \
+        * tensor.eye(num_filters).repeat(
+            x.shape[0], axis=0
+        ).dimshuffle((0, 1, 'x', 'x'))
+    displayable_deconvolution = tensor.grad(error_rate, x_repeated,
+                                            known_grads={
+                                                convnet_features_selected:
+                                                    convnet_features_selected
+                                            })
+    deconvolution_normalizer = abs(
+        displayable_deconvolution
+    ).max(axis=(1, 2, 3))
+    displayable_deconvolution = displayable_deconvolution \
+        / deconvolution_normalizer.dimshuffle((0, 'x', 'x', 'x'))
+    get_displayable_deconvolution = theano.function(
+        [x], displayable_deconvolution
+    )
+    one_example_train_data_stream = construct_stream(train_dataset, config, one_example=True)
+    display_deconvolution_data_stream = Mapping(
+        data_stream=one_example_train_data_stream,
+        mapping=TupleMapping(get_displayable_deconvolution,
+                             same_len_out=True)
+    )
+    display_deconvolution = ImageDataStreamDisplay(
+        data_stream=display_deconvolution_data_stream,
+        source='X',
+        image_shape=(3, 32, 32),
+        axes=('c', 0, 1),
+        shift=0,
+        rescale=1.,
+    )
 
-    extensions.append(Timing())
-    model = Model(train_outputs[0])
+    images_displayer = DisplayImage(
+        image_getters=[display_deconvolution],
+        titles=['Deconvolution']
+    )
+    plotters = []
+    plotters.append(images_displayer)
+
+    from scipy import misc
+    from matplotlib import pyplot as plt
+    if config.load:
+        load_params(config.model_path, model)
+
+    extensions.append(PlotManager('2 layer deconvolution',
+                                  plotters=plotters,
+                                  after_epoch=False,
+                                  every_n_epochs=10,
+                                  after_training=True))
+
+    def visualise(unit, layer):
+        path = '/data/lisatmp3/serdyuk/catsvsdogs/test1/'
+        input_initial = rng.normal(0, 0.1, (1, 3, 280, 280))
+        x_vis = theano.shared(input_initial, 'x_vis')
+        last_hidden_vis = convnet.apply(x_vis)
+        cg_vis = ComputationGraph(last_hidden_vis)
+
+        out, = VariableFilter(applications=[convnet.layers[layer].apply],
+                              name='output')(cg_vis.variables)
+
+        out = out[0, unit, 0, 0]
+        gradient_1 = tensor.grad(out - 0.1 * (x_vis ** 2).sum()
+                                , x_vis)
+        lr = theano.shared(1.e-1)
+        updates = {x_vis: x_vis + lr * gradient_1}
+        updates[lr] = lr * 0.999
+        make_step = theano.function([], [gradient_1, out], updates=updates)
+        compute_prob = theano.function([x], last_hidden)
+
+        for i in xrange(600):
+            grad, val = make_step()
+            print lr.get_value()
+            print 'step', i, 'val', val
+
+        max_val = grad
+        std = max_val.std()
+        mean = max_val.mean()
+        val = x_vis.get_value()[0]#[0, :, 0:10, :10]
+        return val, (max_val[0] - mean) / std
+
+    if config.visualize:
+        compute_prob = theano.function([x], Softmax().apply(last_hidden))
+        for data in valid_stream.get_epoch_iterator():
+            image = numpy.zeros_like(data[0])
+            probs_all = []
+            for i in xrange(28 * 28):
+                print i
+                print data[0][i * 100:(i + 1) * 100, 0, :, :, :].shape
+                #probs = compute_prob(data[0][i * 100:(i + 1) * 100, 0, :, :, :])
+                #probs_all.append(probs)
+            probs_all = numpy.concatenate(probs_all, axis=0)
+            image = probs_all[:, 0].reshape((280, 280))
+
     main_loop = MainLoop(model=model, data_stream=train_stream,
                          algorithm=algorithm, extensions=extensions)
     main_loop.run()
-
-
-if __name__ == '__main__':
-    logging.info('.. starting')
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--config', default='config.yml')
-    args = parser.parse_args()
-    config = parse_config(args.config)
-
-    main(**{name: getattr(config, name) for name in config.config})
