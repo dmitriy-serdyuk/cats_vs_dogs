@@ -329,20 +329,14 @@ if __name__ == '__main__':
     def visualise(unit, layer):
         path = '/data/lisatmp3/serdyuk/catsvsdogs/test1/'
         input_initial = rng.normal(0, 0.1, (1, 3, 280, 280))
-        #input_initial = numpy.array([(misc.imread(path + '1.jpg').transpose(2, 0, 1) - 114.) / 65.])[:, :, :280, :280]
-        #input_initial = numpy.zeros((1, 3, 280, 280))
         x_vis = theano.shared(input_initial, 'x_vis')
         last_hidden_vis = convnet.apply(x_vis)
         cg_vis = ComputationGraph(last_hidden_vis)
 
         out, = VariableFilter(applications=[convnet.layers[layer].apply],
                               name='output')(cg_vis.variables)
-        #print out.ndim
-        #print theano.function([], out)().shape
 
         out = out[0, unit, 0, 0]
-        #out = Softmax().apply(last_hidden_vis)[0, 0]
-        #out = last_hidden_vis[0, 1] #/ last_hidden_vis.sum()
         gradient_1 = tensor.grad(out - 0.1 * (x_vis ** 2).sum()
                                 , x_vis)
         lr = theano.shared(1.e-1)
@@ -356,22 +350,14 @@ if __name__ == '__main__':
             print lr.get_value()
             print 'step', i, 'val', val
 
-        max_val = grad#.get_value()
+        max_val = grad
         std = max_val.std()
         mean = max_val.mean()
-        print max_val[0].transpose(1, 2, 0)
-        print compute_prob(x_vis.get_value())
-        print grad
-        #max_val = (max_val[0].transpose(1, 2, 0) - mean) / std * 65. + 128.
-        #plt.imshow(numpy.cast['uint8'](max_val))
-        #plt.show()
         val = x_vis.get_value()[0]#[0, :, 0:10, :10]
         return val, (max_val[0] - mean) / std
 
-    if True:
-        print 'start comp'
+    if config.visualize:
         compute_prob = theano.function([x], Softmax().apply(last_hidden))
-        print 'start comp'
         for data in valid_stream.get_epoch_iterator():
             image = numpy.zeros_like(data[0])
             probs_all = []
@@ -381,40 +367,7 @@ if __name__ == '__main__':
                 #probs = compute_prob(data[0][i * 100:(i + 1) * 100, 0, :, :, :])
                 #probs_all.append(probs)
             probs_all = numpy.concatenate(probs_all, axis=0)
-            print probs_all.shape
             image = probs_all[:, 0].reshape((280, 280))
-            assert False
-        vals = []
-        grads = []
-        for i in xrange(1):
-            val, grad = visualise(11, 2)
-            vals.append(val)
-            grads.append(grad)
-
-        for i in xrange(10):
-            plt.imshow(numpy.cast['uint8'](vals[i].transpose(1, 2, 0) * 65. + 128.),
-                       interpolation='none')
-            plt.show()
-            plt.imshow(numpy.cast['uint8'](grads[i].transpose(1, 2, 0) * 65. + 128.),
-                       interpolation='none')
-            plt.show()
-        #numpy.save('1layer_layer0_maps.npy', vals)
-        assert False
-        path = '/data/lisatmp3/serdyuk/catsvsdogs/test1/'
-        predict = theano.function([x], [last_hidden, Softmax().apply(last_hidden)])
-        for filename in os.listdir(path):
-            if not os.path.isfile(path + '/' + filename):
-                continue
-            image = misc.imread(path + '/' + filename)
-            dataset = IterableDataset({'X': [image, image, image, image, image]})
-            stream = construct_stream(dataset, config, test=True)
-
-            preds = []
-            for data in stream.get_epoch_iterator():
-                pred = predict(data[0])
-                preds.append(pred[0].argmax())
-            print '%s, %d' % (filename[:-4], 1 if sum(preds) > 2 else 0)
-        assert False
 
     main_loop = MainLoop(model=model, data_stream=train_stream,
                          algorithm=algorithm, extensions=extensions)
